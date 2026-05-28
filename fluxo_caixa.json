@@ -1,0 +1,211 @@
+import json
+import os
+from datetime import datetime
+
+ARQUIVO = "caixa.json"
+
+
+# =========================
+# BASE
+# =========================
+
+def carregar():
+    if not os.path.exists(ARQUIVO):
+        return []
+    with open(ARQUIVO, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def salvar(dados):
+    with open(ARQUIVO, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=4)
+
+
+def hoje():
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+# =========================
+# REGISTRO
+# =========================
+
+def registrar(tipo):
+    dados = carregar()
+
+    valor = float(input("Valor: "))
+    descricao = input("Descrição: ")
+    categoria = input("Categoria: ")
+    metodo = input("Método (dinheiro/pix/debito/credito): ").lower()
+    pessoa = input("Pessoa/Empresa: ")
+
+    dados.append({
+        "tipo": tipo,
+        "valor": valor,
+        "descricao": descricao,
+        "categoria": categoria,
+        "metodo": metodo,
+        "pessoa": pessoa,
+        "data": hoje()
+    })
+
+    salvar(dados)
+    print("✔ Registrado!\n")
+
+
+# =========================
+# CAIXA
+# =========================
+
+def calcular_saldo(dados):
+    saldo = 0
+    for d in dados:
+        if d["tipo"] in ["entrada", "receber"]:
+            saldo += d["valor"]
+        else:
+            saldo -= d["valor"]
+    return saldo
+
+
+def abertura_caixa():
+    valor = float(input("Valor inicial: "))
+    dados = carregar()
+
+    dados.append({
+        "tipo": "abertura",
+        "valor": valor,
+        "descricao": "Abertura de caixa",
+        "categoria": "caixa",
+        "metodo": "dinheiro",
+        "pessoa": "",
+        "data": hoje()
+    })
+
+    salvar(dados)
+    print("✔ Caixa aberto\n")
+
+
+def fechamento_caixa():
+    dados = carregar()
+    saldo = calcular_saldo(dados)
+
+    print(f"💰 Saldo final: R$ {saldo:.2f}")
+
+    dados.append({
+        "tipo": "fechamento",
+        "valor": saldo,
+        "descricao": "Fechamento de caixa",
+        "categoria": "caixa",
+        "metodo": "",
+        "pessoa": "",
+        "data": hoje()
+    })
+
+    salvar(dados)
+    print("✔ Caixa fechado\n")
+
+
+# =========================
+# EXTRATO / FILTROS
+# =========================
+
+def extrato():
+    dados = carregar()
+
+    print("\n📋 EXTRATO")
+    for d in dados:
+        print(f"{d['data']} | {d['tipo']} | R$ {d['valor']} | {d['pessoa']} | {d['descricao']}")
+    print()
+
+
+def filtro_periodo():
+    dados = carregar()
+
+    inicio = input("Data início (YYYY-MM-DD): ")
+    fim = input("Data fim (YYYY-MM-DD): ")
+
+    print("\n📅 RESULTADO")
+    for d in dados:
+        if inicio <= d["data"] <= fim:
+            print(f"{d['data']} | {d['tipo']} | R$ {d['valor']} | {d['pessoa']}")
+    print()
+
+
+def pesquisar():
+    dados = carregar()
+    nome = input("Buscar por pessoa/empresa: ").lower()
+
+    print("\n🔎 RESULTADO")
+    for d in dados:
+        if nome in d["pessoa"].lower():
+            print(f"{d['data']} | {d['tipo']} | R$ {d['valor']} | {d['pessoa']}")
+    print()
+
+
+# =========================
+# RELATÓRIO
+# =========================
+
+def relatorio_mensal():
+    dados = carregar()
+    mes = input("Digite o mês (YYYY-MM): ")
+
+    total = 0
+
+    for d in dados:
+        if d["data"].startswith(mes):
+            if d["tipo"] in ["entrada", "receber"]:
+                total += d["valor"]
+            else:
+                total -= d["valor"]
+
+    print(f"\n📊 Resultado do mês {mes}: R$ {total:.2f}\n")
+
+
+# =========================
+# MENU
+# =========================
+
+def menu():
+    while True:
+        print("==== SISTEMA DE CAIXA ====")
+        print("1 - Abertura de caixa")
+        print("2 - Fechamento de caixa")
+        print("3 - Entrada")
+        print("4 - Saída")
+        print("5 - Pagar")
+        print("6 - Receber")
+        print("7 - Extrato")
+        print("8 - Filtro por período")
+        print("9 - Pesquisar pessoa/empresa")
+        print("10 - Relatório mensal")
+        print("0 - Sair")
+
+        op = input("Escolha: ")
+
+        if op == "1":
+            abertura_caixa()
+        elif op == "2":
+            fechamento_caixa()
+        elif op == "3":
+            registrar("entrada")
+        elif op == "4":
+            registrar("saida")
+        elif op == "5":
+            registrar("pagar")
+        elif op == "6":
+            registrar("receber")
+        elif op == "7":
+            extrato()
+        elif op == "8":
+            filtro_periodo()
+        elif op == "9":
+            pesquisar()
+        elif op == "10":
+            relatorio_mensal()
+        elif op == "0":
+            break
+        else:
+            print("Opção inválida\n")
+
+
+menu()

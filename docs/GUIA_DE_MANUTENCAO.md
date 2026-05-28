@@ -1,0 +1,183 @@
+# Guia de manutencao rapida
+
+Este arquivo foi pensado para acelerar futuras alteracoes no projeto.
+
+## 1. Onde mexer em cada tipo de pedido
+
+### Layout geral e navegacao
+
+- `ui/app.py`
+- `ui/theme.py`
+- `ui/widgets.py`
+
+### Painel diario
+
+- `ui/dashboard.py`
+- `services/cash_service.py`
+
+### Novo registro
+
+- `ui/registro.py`
+- `services/cash_service.py`
+
+### Filtros e extrato
+
+- `ui/extrato.py`
+- `services/cash_service.py`
+- `core/database.py`
+
+### Categorias e pessoas
+
+- `ui/cadastros.py`
+- `ui/widgets.py`
+- `services/cash_service.py`
+- `core/database.py`
+
+### Historico
+
+- `ui/historico.py`
+- `services/cash_service.py`
+- `core/database.py`
+
+### Anexos
+
+- `services/attachments.py`
+- `ui/registro.py`
+- `ui/dashboard.py`
+- `ui/extrato.py`
+- `ui/historico.py`
+
+### Exportacao Excel e PDF
+
+- `services/excel.py`
+- `services/pdf.py`
+- `ui/historico.py`
+
+### Build do executavel
+
+- `build_exe.ps1`
+- `FluxoDeCaixaDiario.spec`
+- `core/app_paths.py`
+
+## 2. Fluxo recomendado para alteracoes
+
+1. Identificar a tela ou modulo afetado
+2. Confirmar se a logica esta na UI ou no servico
+3. Fazer a mudanca na menor area possivel
+4. Validar compilacao
+5. Instanciar `App()` para smoke test rapido
+6. Se for mudanca visual, abrir a tela e conferir uso real
+
+## 3. Checklist de validacao rapida
+
+### Sempre
+
+- `.\.venv\Scripts\python.exe -m compileall ui services core`
+- importar `App` e instanciar sem erro
+
+### Se mexer em UI
+
+- conferir `wraplength`, `grid_columnconfigure`, `grid_rowconfigure`
+- testar janela maximizada
+- testar topo expandido e recolhido
+
+### Se mexer em Historico
+
+- testar selecao por `Ano`
+- testar selecao por `Mes`
+- testar selecao por `Dia`
+- abrir `Resumo`
+- abrir `Analise`
+- abrir `Grafico`
+- abrir `Registros`
+- selecionar um registro
+- editar um registro
+- excluir um registro
+- exportar Excel
+- exportar PDF
+
+### Se mexer em anexos
+
+- anexar em novo registro
+- abrir anexo no registro
+- abrir anexo no extrato
+- abrir anexo no historico
+
+## 4. Convencoes do projeto
+
+- tipos de movimentacao validos: `entrada` e `saida`
+- data de armazenamento: `YYYY-MM-DD`
+- data exibida: `DD/MM/YYYY`
+- banco principal: `caixa.db`
+- estado do dia ativo: `session_state.json`
+
+## 5. Armadilhas conhecidas
+
+### Compatibilidade antiga
+
+`database.py` na raiz existe por legado. Se a mudanca for de regra de negocio, o lugar correto costuma ser `services/cash_service.py` ou `core/database.py`.
+
+### Historico
+
+`ui/historico.py` mistura:
+
+- navegacao do recorte
+- renderizacao dos cards
+- desenho dos graficos
+- tabela e detalhe de registros
+- modal de edicao
+
+Se a mudanca for grande, vale atuar por bloco e nao em tudo ao mesmo tempo.
+
+### Textos com acentos
+
+Sempre revisar os textos renderizados na interface, especialmente quando o console mostrar caracteres estranhos. A interface precisa continuar legivel em portugues.
+
+### Layout
+
+Evite colocar muita informacao na mesma linha. Em telas densas, prefira:
+
+- cards em colunas
+- painel lateral de detalhe
+- submenus em `Tabview`
+- botoes de recolher areas grandes
+
+## 6. Atalhos para pedidos comuns
+
+### "Quero mais espaco na tela"
+
+Revisar:
+
+- `ui/app.py` para topo
+- `ui/historico.py` para cards e paines laterais
+- `ui/dashboard.py` para distribuicao dos blocos
+
+### "Quero mais filtros"
+
+Revisar:
+
+- `ui/extrato.py`
+- `services/cash_service.py:list_movements`
+- `core/database.py:fetch_movements`
+
+### "Quero mudar o grafico"
+
+Revisar:
+
+- `ui/dashboard.py` para painel diario
+- `ui/historico.py` para historico
+
+### "Quero mudar o banco"
+
+Revisar:
+
+- `core/database.py`
+- `core/models.py`
+- `services/cash_service.py`
+
+## 7. Sugestoes para futuras melhorias
+
+- separar `ui/historico.py` em subcomponentes menores
+- criar helpers reutilizaveis para cards de detalhe
+- centralizar textos da interface em um modulo proprio
+- adicionar testes automatizados para servicos e filtros
