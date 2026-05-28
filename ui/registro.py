@@ -45,18 +45,8 @@ class RegisterView(ctk.CTkScrollableFrame):
 
     def _build_header(self) -> None:
         """Cria o cabecalho explicativo da tela de registro."""
-        ctk.CTkLabel(self, text="Novo registro", font=FONTS["title"], text_color=COLORS["text"]).grid(
-            row=0, column=0, sticky="w", pady=(0, 6)
-        )
-        ctk.CTkLabel(
-            self,
-            text="Preencha e salve a movimentação.",
-            font=FONTS["body"],
-            text_color=COLORS["muted"],
-            wraplength=980,
-            justify="left",
-            anchor="w",
-        ).grid(row=1, column=0, sticky="ew", pady=(0, 18))
+        spacer = ctk.CTkFrame(self, fg_color="transparent", height=2)
+        spacer.grid(row=0, column=0, sticky="ew")
 
     def _build_tabs(self) -> None:
         """Separa a tela entre lancamento e apoio operacional."""
@@ -69,7 +59,7 @@ class RegisterView(ctk.CTkScrollableFrame):
             segmented_button_unselected_color=COLORS["surface_alt"],
             text_color=COLORS["text"],
         )
-        self.tabs.grid(row=2, column=0, sticky="nsew")
+        self.tabs.grid(row=1, column=0, sticky="nsew")
         self.tabs.add("Lançamento")
         self.tabs.add("Apoio")
 
@@ -87,10 +77,10 @@ class RegisterView(ctk.CTkScrollableFrame):
         section = SectionFrame(
             self.form_tab,
             title="Dados da movimentação",
-            subtitle="Campos do lançamento.",
+            subtitle=None,
             subtitle_wraplength=840,
         )
-        section.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
+        section.grid(row=0, column=0, sticky="nsew", pady=(4, 0))
         section.grid_columnconfigure(0, weight=1)
         section.grid_columnconfigure(1, weight=1)
 
@@ -112,15 +102,13 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.value_entry.bind("<KeyRelease>", lambda _event: self._update_service_summary())
         self.description_entry = self._build_entry(section, row=4, column=1, label="Descrição", placeholder="Ex.: venda no balcão")
 
-        ctk.CTkLabel(section, text="Categoria", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=6, column=0, padx=20, sticky="w"
-        )
+        self.category_label = ctk.CTkLabel(section, text="Categoria", font=FONTS["body_bold"], text_color=COLORS["text"])
+        self.category_label.grid(row=6, column=0, padx=20, sticky="w")
         self.category_selector = ctk.CTkComboBox(section, height=42, fg_color=COLORS["surface_alt"], border_width=0)
         self.category_selector.grid(row=7, column=0, padx=20, pady=(8, 18), sticky="ew")
 
-        ctk.CTkLabel(section, text="Pessoa / empresa", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=6, column=1, padx=20, sticky="w"
-        )
+        self.person_label = ctk.CTkLabel(section, text="Pessoa / empresa", font=FONTS["body_bold"], text_color=COLORS["text"])
+        self.person_label.grid(row=6, column=1, padx=20, sticky="w")
         self.person_selector = ctk.CTkComboBox(section, height=42, fg_color=COLORS["surface_alt"], border_width=0)
         self.person_selector.grid(row=7, column=1, padx=20, pady=(8, 18), sticky="ew")
 
@@ -128,9 +116,21 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.service_panel.grid(row=8, column=0, columnspan=2, padx=20, pady=(0, 18), sticky="ew")
         self.service_panel.grid_columnconfigure(0, weight=1)
         self.service_panel.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            self.service_panel,
+            text="Fluxo financeiro do serviço",
+            font=FONTS["body_bold"],
+            text_color=COLORS["text"],
+        ).grid(row=0, column=0, columnspan=2, padx=16, pady=(14, 2), sticky="w")
+        ctk.CTkLabel(
+            self.service_panel,
+            text="Entrada bruta, comissão do técnico e valor líquido da empresa.",
+            font=FONTS["small"],
+            text_color=COLORS["muted"],
+        ).grid(row=1, column=0, columnspan=2, padx=16, pady=(0, 10), sticky="w")
 
         ctk.CTkLabel(self.service_panel, text="Técnico responsável", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=0, column=0, padx=16, pady=(14, 4), sticky="w"
+            row=2, column=0, padx=16, pady=(0, 4), sticky="w"
         )
         self.technician_selector = ctk.CTkComboBox(
             self.service_panel,
@@ -139,17 +139,19 @@ class RegisterView(ctk.CTkScrollableFrame):
             border_width=0,
             command=lambda _value: self._update_service_summary(),
         )
-        self.technician_selector.grid(row=1, column=0, padx=16, pady=(0, 14), sticky="ew")
+        self.technician_selector.grid(row=3, column=0, padx=16, pady=(0, 14), sticky="ew")
 
         summary_frame = ctk.CTkFrame(self.service_panel, fg_color="transparent")
-        summary_frame.grid(row=0, column=1, rowspan=2, padx=(8, 16), pady=(14, 14), sticky="nsew")
+        summary_frame.grid(row=2, column=1, rowspan=2, padx=(8, 16), pady=(0, 14), sticky="nsew")
         summary_frame.grid_columnconfigure(0, weight=1)
         summary_frame.grid_columnconfigure(1, weight=1)
 
-        self.technician_percent_label = self._build_service_metric(summary_frame, 0, 0, "Comissão técnico", "0%")
-        self.company_percent_label = self._build_service_metric(summary_frame, 0, 1, "Empresa", "100%")
-        self.technician_value_label = self._build_service_metric(summary_frame, 1, 0, "Comissão calculada", "R$ 0,00")
-        self.company_value_label = self._build_service_metric(summary_frame, 1, 1, "Valor empresa", "R$ 0,00")
+        self.technician_card = self._build_service_metric(summary_frame, 0, 0, "Comissão do técnico")
+        self.company_card = self._build_service_metric(summary_frame, 0, 1, "Valor da empresa")
+        self.technician_value_label = self.technician_card["value"]
+        self.technician_percent_label = self.technician_card["secondary"]
+        self.company_value_label = self.company_card["value"]
+        self.company_percent_label = self.company_card["secondary"]
 
         ctk.CTkLabel(section, text="Data", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
             row=10, column=0, padx=20, sticky="w"
@@ -286,17 +288,19 @@ class RegisterView(ctk.CTkScrollableFrame):
             height=44,
         ).grid(row=6, column=0, sticky="ew", padx=20, pady=(18, 20))
 
-    def _build_service_metric(self, master, row: int, column: int, title: str, value: str) -> ctk.CTkLabel:
-        """Cria um pequeno bloco de resumo para serviço técnico."""
+    def _build_service_metric(self, master, row: int, column: int, title: str) -> dict[str, ctk.CTkLabel]:
+        """Cria um bloco de resumo para o fluxo financeiro do serviço técnico."""
         box = ctk.CTkFrame(master, fg_color=COLORS["surface"], corner_radius=14)
         box.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
         box.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(box, text=title, font=FONTS["small"], text_color=COLORS["muted"], anchor="w").grid(
             row=0, column=0, sticky="w", padx=12, pady=(10, 2)
         )
-        value_label = ctk.CTkLabel(box, text=value, font=FONTS["body_bold"], text_color=COLORS["text"], anchor="w")
-        value_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
-        return value_label
+        value_label = ctk.CTkLabel(box, text="R$ 0,00", font=("Segoe UI Semibold", 20), text_color=COLORS["text"], anchor="w")
+        value_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 2))
+        secondary_label = ctk.CTkLabel(box, text="0%", font=FONTS["small"], text_color=COLORS["muted"], anchor="w")
+        secondary_label.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 10))
+        return {"value": value_label, "secondary": secondary_label}
 
     def _handle_operation_change(self) -> None:
         """Mostra ou esconde os campos extras do serviço técnico."""
@@ -304,8 +308,12 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.value_label.configure(text="Valor do serviço" if is_service else "Valor")
         if is_service:
             self.service_panel.grid()
+            self.category_label.grid_remove()
+            self.category_selector.grid_remove()
         else:
             self.service_panel.grid_remove()
+            self.category_label.grid()
+            self.category_selector.grid()
         self._update_service_summary()
 
     def _selected_technician(self):
@@ -316,14 +324,14 @@ class RegisterView(ctk.CTkScrollableFrame):
         """Atualiza a prévia de comissão e valor da empresa."""
         technician = self._selected_technician()
         if technician is None:
-            self.technician_percent_label.configure(text="0%")
-            self.company_percent_label.configure(text="100%")
             self.technician_value_label.configure(text="R$ 0,00")
             self.company_value_label.configure(text="R$ 0,00")
+            self.technician_percent_label.configure(text="0% técnico")
+            self.company_percent_label.configure(text="100% empresa")
             return
 
-        self.technician_percent_label.configure(text=f"{technician.percentual_comissao:.2f}%")
-        self.company_percent_label.configure(text=f"{technician.percentual_empresa:.2f}%")
+        self.technician_percent_label.configure(text=f"{technician.percentual_comissao:.2f}% técnico")
+        self.company_percent_label.configure(text=f"{technician.percentual_empresa:.2f}% empresa")
         try:
             split = self.service.calculate_technical_service_split(
                 self.value_entry.get().strip() or "0",
@@ -358,15 +366,25 @@ class RegisterView(ctk.CTkScrollableFrame):
         people = [item.nome for item in self.service.list_people()]
         technicians = self.service.list_technicians(include_inactive=False)
         self._technician_map = {item.nome: item for item in technicians}
+        current_person = self.person_selector.get()
+        current_category = self.category_selector.get()
+        current_technician = self.technician_selector.get()
         self.category_selector.configure(values=categories or ["Sem categorias"])
         self.person_selector.configure(values=people or ["Sem cadastros"])
         self.technician_selector.configure(values=list(self._technician_map) or ["Sem técnicos ativos"])
         if categories:
-            self.category_selector.set(categories[0])
+            preferred_category = current_category if current_category in categories else categories[0]
+            self.category_selector.set(preferred_category)
         if people:
-            self.person_selector.set(people[0])
+            if current_person in people:
+                self.person_selector.set(current_person)
+            elif "Pessoas diversas" in people:
+                self.person_selector.set("Pessoas diversas")
+            else:
+                self.person_selector.set(people[0])
         if self._technician_map:
-            self.technician_selector.set(next(iter(self._technician_map)))
+            preferred_technician = current_technician if current_technician in self._technician_map else next(iter(self._technician_map))
+            self.technician_selector.set(preferred_technician)
         else:
             self.technician_selector.set("Sem técnicos ativos")
         self._handle_operation_change()
@@ -395,21 +413,22 @@ class RegisterView(ctk.CTkScrollableFrame):
 
     def save(self) -> None:
         """Valida e salva a movimentacao, depois limpa o formulario."""
-        if self.category_selector.get() == "Sem categorias":
+        is_service = self.type_selector.get() == self.SERVICE_OPERATION
+        if not is_service and self.category_selector.get() == "Sem categorias":
             messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma categoria antes de lançar movimentações.")
             return
         if self.person_selector.get() == "Sem cadastros":
             messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma pessoa ou empresa antes de lançar movimentações.")
             return
         try:
-            if self.type_selector.get() == self.SERVICE_OPERATION:
+            if is_service:
                 technician = self._selected_technician()
                 if technician is None or technician.id is None:
                     raise ValueError("Selecione um técnico ativo.")
                 movement, commission = self.service.register_technical_service(
                     valor_servico=self.value_entry.get(),
                     descricao=self.description_entry.get(),
-                    categoria=self.category_selector.get(),
+                    categoria="Serviços",
                     metodo=self.method_selector.get(),
                     pessoa=self.person_selector.get(),
                     tecnico_id=technician.id,
@@ -454,11 +473,12 @@ class RegisterView(ctk.CTkScrollableFrame):
 
     def _clear_form(self) -> None:
         """Restaura o formulario ao estado inicial para novo registro."""
+        current_operation = self.type_selector.get()
         for entry in [self.value_entry, self.description_entry, self.date_entry]:
             entry.delete(0, "end")
-        self.type_selector.set(MovementType.ENTRADA.value)
         self.method_selector.set(PAYMENT_METHODS[0])
         self.clear_attachment()
+        self.type_selector.set(current_operation)
         self._handle_operation_change()
 
     @staticmethod

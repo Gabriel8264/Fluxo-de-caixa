@@ -253,7 +253,8 @@ class App(ctk.CTk):
     def handle_record_saved(self, _: object = None) -> None:
         """Reage ao salvamento de lancamento recarregando as views dependentes."""
         self._refresh_all_views()
-        self.show_view("dashboard")
+        if self.current_view is not self.views["register"]:
+            self.show_view("register")
 
     def _refresh_all_views(self) -> None:
         """Dispara refresh em todas as telas e atualiza o topo."""
