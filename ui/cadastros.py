@@ -9,7 +9,7 @@ import customtkinter as ctk
 
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import RegistryManagerFrame
+from ui.widgets import RegistryManagerFrame, TechnicianManagerFrame
 
 
 class RegistriesView(ctk.CTkFrame):
@@ -48,11 +48,14 @@ class RegistriesView(ctk.CTkFrame):
         self.tabs.grid(row=2, column=0, sticky="nsew")
         self.tabs.add("Categorias")
         self.tabs.add("Pessoas e empresas")
+        self.tabs.add("Técnicos e comissões")
 
         categories_tab = self.tabs.tab("Categorias")
         categories_tab.grid_columnconfigure(0, weight=1)
         people_tab = self.tabs.tab("Pessoas e empresas")
         people_tab.grid_columnconfigure(0, weight=1)
+        technicians_tab = self.tabs.tab("Técnicos e comissões")
+        technicians_tab.grid_columnconfigure(0, weight=1)
 
         self.category_manager = RegistryManagerFrame(
             categories_tab,
@@ -78,7 +81,19 @@ class RegistriesView(ctk.CTkFrame):
         )
         self.people_manager.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
 
+        self.technician_manager = TechnicianManagerFrame(
+            technicians_tab,
+            title="Técnicos e comissões",
+            subtitle="Nome, comissão, empresa e status.",
+            add_callback=self.service.add_technician,
+            update_callback=self.service.update_technician,
+            delete_callback=self.service.delete_technician,
+            list_callback=self.service.list_technicians,
+        )
+        self.technician_manager.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
+
     def refresh(self) -> None:
         """Atualiza as listas exibidas nas duas abas de cadastro."""
         self.category_manager.refresh()
         self.people_manager.refresh()
+        self.technician_manager.refresh()

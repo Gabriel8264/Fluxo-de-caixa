@@ -21,6 +21,8 @@ from ui.widgets import DateMaskEntry, MarqueeLabel, SectionFrame
 class RegisterView(ctk.CTkScrollableFrame):
     """View de registro de entradas e saidas com suporte a anexos."""
 
+    SERVICE_OPERATION = "serviço técnico"
+
     def __init__(
         self,
         master,
@@ -34,6 +36,7 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.on_saved = on_saved
         self.on_open_registries = on_open_registries
         self.attachment_path = ""
+        self._technician_map: dict[str, object] = {}
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -91,14 +94,22 @@ class RegisterView(ctk.CTkScrollableFrame):
         section.grid_columnconfigure(0, weight=1)
         section.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(section, text="Tipo", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
+        ctk.CTkLabel(section, text="Operação", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
             row=2, column=0, padx=20, sticky="w"
         )
-        self.type_selector = ctk.CTkSegmentedButton(section, values=[movement.value for movement in MovementType])
+        self.type_selector = ctk.CTkSegmentedButton(
+            section,
+            values=[MovementType.ENTRADA.value, MovementType.SAIDA.value, self.SERVICE_OPERATION],
+            command=lambda _value: self._handle_operation_change(),
+        )
         self.type_selector.grid(row=3, column=0, columnspan=2, padx=20, pady=(8, 18), sticky="ew")
         self.type_selector.set(MovementType.ENTRADA.value)
 
-        self.value_entry = self._build_entry(section, row=4, column=0, label="Valor", placeholder="0,00")
+        self.value_label = ctk.CTkLabel(section, text="Valor", font=FONTS["body_bold"], text_color=COLORS["text"])
+        self.value_label.grid(row=4, column=0, padx=20, sticky="w")
+        self.value_entry = ctk.CTkEntry(section, placeholder_text="0,00", height=42, fg_color=COLORS["surface_alt"], border_width=0)
+        self.value_entry.grid(row=5, column=0, padx=20, pady=(8, 18), sticky="ew")
+        self.value_entry.bind("<KeyRelease>", lambda _event: self._update_service_summary())
         self.description_entry = self._build_entry(section, row=4, column=1, label="Descrição", placeholder="Ex.: venda no balcão")
 
         ctk.CTkLabel(section, text="Categoria", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
@@ -113,11 +124,38 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.person_selector = ctk.CTkComboBox(section, height=42, fg_color=COLORS["surface_alt"], border_width=0)
         self.person_selector.grid(row=7, column=1, padx=20, pady=(8, 18), sticky="ew")
 
+        self.service_panel = ctk.CTkFrame(section, fg_color=COLORS["surface_alt"], corner_radius=18)
+        self.service_panel.grid(row=8, column=0, columnspan=2, padx=20, pady=(0, 18), sticky="ew")
+        self.service_panel.grid_columnconfigure(0, weight=1)
+        self.service_panel.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.service_panel, text="Técnico responsável", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
+            row=0, column=0, padx=16, pady=(14, 4), sticky="w"
+        )
+        self.technician_selector = ctk.CTkComboBox(
+            self.service_panel,
+            height=40,
+            fg_color=COLORS["surface"],
+            border_width=0,
+            command=lambda _value: self._update_service_summary(),
+        )
+        self.technician_selector.grid(row=1, column=0, padx=16, pady=(0, 14), sticky="ew")
+
+        summary_frame = ctk.CTkFrame(self.service_panel, fg_color="transparent")
+        summary_frame.grid(row=0, column=1, rowspan=2, padx=(8, 16), pady=(14, 14), sticky="nsew")
+        summary_frame.grid_columnconfigure(0, weight=1)
+        summary_frame.grid_columnconfigure(1, weight=1)
+
+        self.technician_percent_label = self._build_service_metric(summary_frame, 0, 0, "Comissão técnico", "0%")
+        self.company_percent_label = self._build_service_metric(summary_frame, 0, 1, "Empresa", "100%")
+        self.technician_value_label = self._build_service_metric(summary_frame, 1, 0, "Comissão calculada", "R$ 0,00")
+        self.company_value_label = self._build_service_metric(summary_frame, 1, 1, "Valor empresa", "R$ 0,00")
+
         ctk.CTkLabel(section, text="Data", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=8, column=0, padx=20, sticky="w"
+            row=10, column=0, padx=20, sticky="w"
         )
         date_row = ctk.CTkFrame(section, fg_color="transparent")
-        date_row.grid(row=9, column=0, padx=20, pady=(8, 18), sticky="ew")
+        date_row.grid(row=11, column=0, padx=20, pady=(8, 18), sticky="ew")
         date_row.grid_columnconfigure(0, weight=1)
         self.date_entry = DateMaskEntry(
             date_row,
@@ -139,7 +177,7 @@ class RegisterView(ctk.CTkScrollableFrame):
         ).grid(row=0, column=1, padx=(10, 0))
 
         ctk.CTkLabel(section, text="Método", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=8, column=1, padx=20, sticky="w"
+            row=10, column=1, padx=20, sticky="w"
         )
         self.method_selector = ctk.CTkOptionMenu(
             section,
@@ -150,14 +188,14 @@ class RegisterView(ctk.CTkScrollableFrame):
             button_hover_color=COLORS["primary_hover"],
             text_color=COLORS["text"],
         )
-        self.method_selector.grid(row=9, column=1, padx=20, pady=(8, 18), sticky="ew")
+        self.method_selector.grid(row=11, column=1, padx=20, pady=(8, 18), sticky="ew")
         self.method_selector.set(PAYMENT_METHODS[0])
 
         ctk.CTkLabel(section, text="Anexo", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
-            row=10, column=0, padx=20, sticky="w"
+            row=12, column=0, padx=20, sticky="w"
         )
         attachment_row = ctk.CTkFrame(section, fg_color="transparent")
-        attachment_row.grid(row=11, column=0, columnspan=2, padx=20, pady=(8, 18), sticky="ew")
+        attachment_row.grid(row=13, column=0, columnspan=2, padx=20, pady=(8, 18), sticky="ew")
         attachment_row.grid_columnconfigure(0, weight=1)
         self.attachment_label = MarqueeLabel(
             attachment_row,
@@ -208,7 +246,8 @@ class RegisterView(ctk.CTkScrollableFrame):
             fg_color=COLORS["primary"],
             hover_color=COLORS["primary_hover"],
             font=FONTS["body_bold"],
-        ).grid(row=12, column=0, columnspan=2, padx=20, pady=(10, 20), sticky="ew")
+        ).grid(row=14, column=0, columnspan=2, padx=20, pady=(10, 20), sticky="ew")
+        self._handle_operation_change()
 
     def _build_support(self) -> None:
         """Renderiza orientacoes curtas para uso consistente da tela."""
@@ -247,6 +286,57 @@ class RegisterView(ctk.CTkScrollableFrame):
             height=44,
         ).grid(row=6, column=0, sticky="ew", padx=20, pady=(18, 20))
 
+    def _build_service_metric(self, master, row: int, column: int, title: str, value: str) -> ctk.CTkLabel:
+        """Cria um pequeno bloco de resumo para serviço técnico."""
+        box = ctk.CTkFrame(master, fg_color=COLORS["surface"], corner_radius=14)
+        box.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+        box.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(box, text=title, font=FONTS["small"], text_color=COLORS["muted"], anchor="w").grid(
+            row=0, column=0, sticky="w", padx=12, pady=(10, 2)
+        )
+        value_label = ctk.CTkLabel(box, text=value, font=FONTS["body_bold"], text_color=COLORS["text"], anchor="w")
+        value_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+        return value_label
+
+    def _handle_operation_change(self) -> None:
+        """Mostra ou esconde os campos extras do serviço técnico."""
+        is_service = self.type_selector.get() == self.SERVICE_OPERATION
+        self.value_label.configure(text="Valor do serviço" if is_service else "Valor")
+        if is_service:
+            self.service_panel.grid()
+        else:
+            self.service_panel.grid_remove()
+        self._update_service_summary()
+
+    def _selected_technician(self):
+        """Retorna o técnico escolhido no seletor do formulário."""
+        return self._technician_map.get(self.technician_selector.get())
+
+    def _update_service_summary(self) -> None:
+        """Atualiza a prévia de comissão e valor da empresa."""
+        technician = self._selected_technician()
+        if technician is None:
+            self.technician_percent_label.configure(text="0%")
+            self.company_percent_label.configure(text="100%")
+            self.technician_value_label.configure(text="R$ 0,00")
+            self.company_value_label.configure(text="R$ 0,00")
+            return
+
+        self.technician_percent_label.configure(text=f"{technician.percentual_comissao:.2f}%")
+        self.company_percent_label.configure(text=f"{technician.percentual_empresa:.2f}%")
+        try:
+            split = self.service.calculate_technical_service_split(
+                self.value_entry.get().strip() or "0",
+                technician.percentual_comissao,
+            )
+        except ValueError:
+            self.technician_value_label.configure(text="R$ 0,00")
+            self.company_value_label.configure(text="R$ 0,00")
+            return
+
+        self.technician_value_label.configure(text=self._currency(split["valor_comissao_tecnico"]))
+        self.company_value_label.configure(text=self._currency(split["valor_empresa"]))
+
     def _build_entry(self, master, *, row: int, column: int, label: str, placeholder: str) -> ctk.CTkEntry:
         """Cria campo padronizado do formulario."""
         ctk.CTkLabel(master, text=label, font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
@@ -260,17 +350,26 @@ class RegisterView(ctk.CTkScrollableFrame):
         """Permite abrir a tela ja focada em entrada ou saida."""
         self.type_selector.set(MovementType.from_db(movement_type).value)
         self.tabs.set("Lançamento")
+        self._handle_operation_change()
 
     def refresh(self) -> None:
         """Recarrega categorias e pessoas disponiveis para selecao."""
         categories = [item.nome for item in self.service.list_categories()]
         people = [item.nome for item in self.service.list_people()]
+        technicians = self.service.list_technicians(include_inactive=False)
+        self._technician_map = {item.nome: item for item in technicians}
         self.category_selector.configure(values=categories or ["Sem categorias"])
         self.person_selector.configure(values=people or ["Sem cadastros"])
+        self.technician_selector.configure(values=list(self._technician_map) or ["Sem técnicos ativos"])
         if categories:
             self.category_selector.set(categories[0])
         if people:
             self.person_selector.set(people[0])
+        if self._technician_map:
+            self.technician_selector.set(next(iter(self._technician_map)))
+        else:
+            self.technician_selector.set("Sem técnicos ativos")
+        self._handle_operation_change()
 
     def select_attachment(self) -> None:
         """Abre seletor de arquivo para anexar ao lancamento."""
@@ -303,16 +402,32 @@ class RegisterView(ctk.CTkScrollableFrame):
             messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma pessoa ou empresa antes de lançar movimentações.")
             return
         try:
-            movement = self.service.register_movement(
-                tipo=self.type_selector.get(),
-                valor=self.value_entry.get(),
-                descricao=self.description_entry.get(),
-                categoria=self.category_selector.get(),
-                metodo=self.method_selector.get(),
-                pessoa=self.person_selector.get(),
-                data_movimento=self.date_entry.get().strip() or None,
-                anexo=self.attachment_path,
-            )
+            if self.type_selector.get() == self.SERVICE_OPERATION:
+                technician = self._selected_technician()
+                if technician is None or technician.id is None:
+                    raise ValueError("Selecione um técnico ativo.")
+                movement, commission = self.service.register_technical_service(
+                    valor_servico=self.value_entry.get(),
+                    descricao=self.description_entry.get(),
+                    categoria=self.category_selector.get(),
+                    metodo=self.method_selector.get(),
+                    pessoa=self.person_selector.get(),
+                    tecnico_id=technician.id,
+                    data_movimento=self.date_entry.get().strip() or None,
+                    anexo=self.attachment_path,
+                )
+            else:
+                movement = self.service.register_movement(
+                    tipo=self.type_selector.get(),
+                    valor=self.value_entry.get(),
+                    descricao=self.description_entry.get(),
+                    categoria=self.category_selector.get(),
+                    metodo=self.method_selector.get(),
+                    pessoa=self.person_selector.get(),
+                    data_movimento=self.date_entry.get().strip() or None,
+                    anexo=self.attachment_path,
+                )
+                commission = None
         except ValueError as exc:
             messagebox.showerror("Cadastro inválido", str(exc))
             return
@@ -322,8 +437,20 @@ class RegisterView(ctk.CTkScrollableFrame):
 
         self._clear_form()
         self.refresh()
-        messagebox.showinfo("Sucesso", "Movimentação registrada com sucesso.")
-        self.on_saved(movement)
+        if commission is None:
+            messagebox.showinfo("Sucesso", "Movimentação registrada com sucesso.")
+            self.on_saved(movement)
+        else:
+            messagebox.showinfo(
+                "Sucesso",
+                (
+                    "Serviço técnico registrado com sucesso.\n\n"
+                    f"Entrada: {self._currency(movement.valor)}\n"
+                    f"Comissão do técnico: {self._currency(commission.valor)}\n"
+                    f"Empresa: {self._currency(movement.valor_empresa)}"
+                ),
+            )
+            self.on_saved((movement, commission))
 
     def _clear_form(self) -> None:
         """Restaura o formulario ao estado inicial para novo registro."""
@@ -332,3 +459,9 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.type_selector.set(MovementType.ENTRADA.value)
         self.method_selector.set(PAYMENT_METHODS[0])
         self.clear_attachment()
+        self._handle_operation_change()
+
+    @staticmethod
+    def _currency(value: float) -> str:
+        """Formata valor em real brasileiro."""
+        return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

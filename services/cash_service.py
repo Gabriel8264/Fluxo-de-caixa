@@ -9,9 +9,10 @@ import calendar
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime
+from uuid import uuid4
 
 from core.database import DatabaseManager
-from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, PAYMENT_METHODS, RegistryItem
+from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, PAYMENT_METHODS, RegistryItem, Technician
 from services.session_service import SessionService
 
 
@@ -64,6 +65,74 @@ class CashService:
         )
         movement.id = self.repository.add_movement(movement)
         return movement
+
+    def register_technical_service(
+        self,
+        *,
+        valor_servico: str | float,
+        descricao: str,
+        categoria: str,
+        metodo: str,
+        pessoa: str,
+        tecnico_id: int,
+        data_movimento: str | None = None,
+        anexo: str = "",
+    ) -> tuple[Movement, Movement]:
+        """Registra um serviço técnico criando entrada e saída de comissão."""
+        technician = self.get_technician(tecnico_id)
+        if technician.status != "ativo":
+            raise ValueError("Selecione um técnico ativo.")
+
+        split = self.calculate_technical_service_split(valor_servico, technician.percentual_comissao)
+        service_value = split["valor_servico"]
+        movement_date = self._normalize_date(data_movimento) if data_movimento else self.get_active_day()
+        cleaned_description = self._require_text(descricao, "A descrição é obrigatória.")
+        cleaned_category = self._require_text(categoria, "A categoria é obrigatória.")
+        cleaned_person = self._require_text(pessoa, "Informe a pessoa ou empresa.")
+        normalized_method = self._normalize_method(metodo)
+        if normalized_method not in PAYMENT_METHODS:
+            raise ValueError("Método de pagamento inválido.")
+
+        commission_value = split["valor_comissao_tecnico"]
+        company_value = split["valor_empresa"]
+        group_id = uuid4().hex
+
+        entry = Movement(
+            tipo=MovementType.ENTRADA.value,
+            valor=round(service_value, 2),
+            descricao=cleaned_description,
+            categoria=cleaned_category,
+            metodo=normalized_method,
+            pessoa=cleaned_person,
+            data=movement_date,
+            anexo=anexo.strip(),
+            grupo_servico=group_id,
+            papel_servico="entrada_servico",
+            tecnico=technician.nome,
+            percentual_comissao_tecnico=technician.percentual_comissao,
+            valor_comissao_tecnico=commission_value,
+            valor_empresa=company_value,
+        )
+        entry.id = self.repository.add_movement(entry)
+
+        commission_exit = Movement(
+            tipo=MovementType.SAIDA.value,
+            valor=commission_value,
+            descricao=f"Comissão técnica · {cleaned_description}",
+            categoria="Comissão",
+            metodo=normalized_method,
+            pessoa=technician.nome,
+            data=movement_date,
+            anexo=anexo.strip(),
+            grupo_servico=group_id,
+            papel_servico="comissao_tecnica",
+            tecnico=technician.nome,
+            percentual_comissao_tecnico=technician.percentual_comissao,
+            valor_comissao_tecnico=commission_value,
+            valor_empresa=company_value,
+        )
+        commission_exit.id = self.repository.add_movement(commission_exit)
+        return entry, commission_exit
 
     def update_movement(
         self,
@@ -246,6 +315,63 @@ class CashService:
         """Remove pessoa ou empresa do cadastro auxiliar."""
         self.repository.delete_registry_item("pessoas", item_id)
 
+    def list_technicians(self, *, include_inactive: bool = True) -> list[Technician]:
+        """Lista técnicos cadastrados, opcionalmente filtrando inativos."""
+        technicians = self.repository.list_technicians()
+        if include_inactive:
+            return technicians
+        return [item for item in technicians if item.status == "ativo"]
+
+    def get_technician(self, technician_id: int) -> Technician:
+        """Retorna um técnico específico pelo id."""
+        for technician in self.repository.list_technicians():
+            if technician.id == technician_id:
+                return technician
+        raise ValueError("Técnico não encontrado.")
+
+    def calculate_technical_service_split(self, valor_servico: str | float, percentual_comissao: str | float) -> dict[str, float]:
+        """Calcula comissão do técnico e valor líquido da empresa."""
+        service_value = self._normalize_amount(valor_servico)
+        commission_percent = self._normalize_percentage(percentual_comissao)
+        commission_value = round(service_value * commission_percent / 100, 2)
+        company_value = round(service_value - commission_value, 2)
+        return {
+            "valor_servico": round(service_value, 2),
+            "percentual_tecnico": commission_percent,
+            "percentual_empresa": round(100.0 - commission_percent, 2),
+            "valor_comissao_tecnico": commission_value,
+            "valor_empresa": company_value,
+        }
+
+    def add_technician(self, nome: str, percentual_comissao: str | float, status: str) -> Technician:
+        """Cadastra técnico com percentual de comissão validado."""
+        technician = Technician(
+            nome=self._require_text(nome, "Informe o nome do técnico."),
+            percentual_comissao=self._normalize_percentage(percentual_comissao),
+            status=self._normalize_technician_status(status),
+        )
+        try:
+            return self.repository.add_technician(technician)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe um técnico com esse nome.") from exc
+
+    def update_technician(self, technician_id: int, nome: str, percentual_comissao: str | float, status: str) -> None:
+        """Atualiza técnico mantendo os percentuais históricos já usados."""
+        technician = Technician(
+            id=technician_id,
+            nome=self._require_text(nome, "Informe o nome do técnico."),
+            percentual_comissao=self._normalize_percentage(percentual_comissao),
+            status=self._normalize_technician_status(status),
+        )
+        try:
+            self.repository.update_technician(technician)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("Já existe um técnico com esse nome.") from exc
+
+    def delete_technician(self, technician_id: int) -> None:
+        """Exclui técnico do cadastro."""
+        self.repository.delete_technician(technician_id)
+
     def _build_movement(
         self,
         *,
@@ -421,3 +547,26 @@ class CashService:
             "crédito": "crédito",
         }
         return aliases.get(normalized, normalized)
+
+    @staticmethod
+    def _normalize_percentage(value: str | float) -> float:
+        """Normaliza percentual de comissão para a faixa entre 0 e 100."""
+        if isinstance(value, str):
+            cleaned = value.strip().replace("%", "").replace(",", ".")
+        else:
+            cleaned = str(value)
+        try:
+            percentage = float(cleaned)
+        except ValueError as exc:
+            raise ValueError("Informe uma comissão numérica válida.") from exc
+        if percentage < 0 or percentage > 100:
+            raise ValueError("A comissão do técnico deve ficar entre 0 e 100.")
+        return round(percentage, 2)
+
+    @staticmethod
+    def _normalize_technician_status(value: str) -> str:
+        """Garante que o status do técnico esteja no conjunto permitido."""
+        normalized = value.strip().lower()
+        if normalized not in {"ativo", "inativo"}:
+            raise ValueError("Status inválido.")
+        return normalized

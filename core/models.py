@@ -39,6 +39,18 @@ class RegistryItem:
 
 
 @dataclass(slots=True)
+class Technician:
+    nome: str
+    percentual_comissao: float
+    status: str = "ativo"
+    id: int | None = None
+
+    @property
+    def percentual_empresa(self) -> float:
+        return round(100.0 - self.percentual_comissao, 2)
+
+
+@dataclass(slots=True)
 class Movement:
     tipo: str
     valor: float
@@ -48,6 +60,12 @@ class Movement:
     pessoa: str
     data: str
     anexo: str = ""
+    grupo_servico: str = ""
+    papel_servico: str = ""
+    tecnico: str = ""
+    percentual_comissao_tecnico: float = 0.0
+    valor_comissao_tecnico: float = 0.0
+    valor_empresa: float = 0.0
     id: int | None = None
 
     @property

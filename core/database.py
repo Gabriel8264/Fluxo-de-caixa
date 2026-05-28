@@ -11,11 +11,11 @@ from contextlib import closing
 from pathlib import Path
 
 from core.app_paths import data_file
-from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, RegistryItem
+from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, RegistryItem, Technician
 
 
 DEFAULT_DB_PATH = data_file("caixa.db")
-DEFAULT_CATEGORIES = ["Vendas", "Serviços", "Fornecedores", "Operacional", "Transporte", "Impostos"]
+DEFAULT_CATEGORIES = ["Vendas", "Serviços", "Fornecedores", "Operacional", "Transporte", "Impostos", "Comissão"]
 
 
 class DatabaseManager:
@@ -66,9 +66,21 @@ class DatabaseManager:
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tecnicos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    percentual_comissao REAL NOT NULL CHECK(percentual_comissao >= 0 AND percentual_comissao <= 100),
+                    status TEXT NOT NULL CHECK(status IN ('ativo', 'inativo'))
+                )
+                """
+            )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_data ON movimentos (data DESC)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_busca ON movimentos (pessoa, descricao, categoria)")
             self._migrate_legacy_types(cur)
+            self._ensure_service_columns(cur)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_servico ON movimentos (grupo_servico)")
             self._seed_categories(cur)
             self._sync_registry_from_movements(cur, "categorias", "categoria")
             self._sync_registry_from_movements(cur, "pessoas", "pessoa")
@@ -86,6 +98,21 @@ class DatabaseManager:
         cur.execute("UPDATE movimentos SET tipo = 'saida' WHERE LOWER(tipo) IN ('pagar', 'saída')")
         cur.execute("UPDATE movimentos SET metodo = 'débito' WHERE LOWER(metodo) = 'debito'")
         cur.execute("UPDATE movimentos SET metodo = 'crédito' WHERE LOWER(metodo) = 'credito'")
+
+    def _ensure_service_columns(self, cur: sqlite3.Cursor) -> None:
+        """Garante campos extras necessários ao fluxo de serviço técnico."""
+        columns = {row["name"] for row in cur.execute("PRAGMA table_info(movimentos)").fetchall()}
+        additions = {
+            "grupo_servico": "TEXT NOT NULL DEFAULT ''",
+            "papel_servico": "TEXT NOT NULL DEFAULT ''",
+            "tecnico": "TEXT NOT NULL DEFAULT ''",
+            "percentual_comissao_tecnico": "REAL NOT NULL DEFAULT 0",
+            "valor_comissao_tecnico": "REAL NOT NULL DEFAULT 0",
+            "valor_empresa": "REAL NOT NULL DEFAULT 0",
+        }
+        for column_name, definition in additions.items():
+            if column_name not in columns:
+                cur.execute(f"ALTER TABLE movimentos ADD COLUMN {column_name} {definition}")
 
     def _seed_categories(self, cur: sqlite3.Cursor) -> None:
         """Insere categorias padrao caso ainda nao existam."""
@@ -106,8 +133,12 @@ class DatabaseManager:
             cur = con.cursor()
             cur.execute(
                 """
-                INSERT INTO movimentos (tipo, valor, descricao, categoria, metodo, pessoa, data, anexo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO movimentos (
+                    tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
+                    grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                    valor_comissao_tecnico, valor_empresa
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     movement.movement_type.storage_value,
@@ -118,6 +149,12 @@ class DatabaseManager:
                     movement.pessoa,
                     movement.data,
                     movement.anexo,
+                    movement.grupo_servico,
+                    movement.papel_servico,
+                    movement.tecnico,
+                    movement.percentual_comissao_tecnico,
+                    movement.valor_comissao_tecnico,
+                    movement.valor_empresa,
                 ),
             )
             cur.execute("INSERT OR IGNORE INTO categorias (nome) VALUES (?)", (movement.categoria,))
@@ -135,7 +172,9 @@ class DatabaseManager:
             cur.execute(
                 """
                 UPDATE movimentos
-                SET tipo = ?, valor = ?, descricao = ?, categoria = ?, metodo = ?, pessoa = ?, data = ?, anexo = ?
+                SET tipo = ?, valor = ?, descricao = ?, categoria = ?, metodo = ?, pessoa = ?, data = ?, anexo = ?,
+                    grupo_servico = ?, papel_servico = ?, tecnico = ?, percentual_comissao_tecnico = ?,
+                    valor_comissao_tecnico = ?, valor_empresa = ?
                 WHERE id = ?
                 """,
                 (
@@ -147,6 +186,12 @@ class DatabaseManager:
                     movement.pessoa,
                     movement.data,
                     movement.anexo,
+                    movement.grupo_servico,
+                    movement.papel_servico,
+                    movement.tecnico,
+                    movement.percentual_comissao_tecnico,
+                    movement.valor_comissao_tecnico,
+                    movement.valor_empresa,
                     movement.id,
                 ),
             )
@@ -183,9 +228,9 @@ class DatabaseManager:
         if search.strip():
             term = f"%{search.strip()}%"
             clauses.append(
-                "(LOWER(pessoa) LIKE LOWER(?) OR LOWER(descricao) LIKE LOWER(?) OR LOWER(categoria) LIKE LOWER(?) OR LOWER(anexo) LIKE LOWER(?))"
+                "(LOWER(pessoa) LIKE LOWER(?) OR LOWER(descricao) LIKE LOWER(?) OR LOWER(categoria) LIKE LOWER(?) OR LOWER(anexo) LIKE LOWER(?) OR LOWER(tecnico) LIKE LOWER(?))"
             )
-            params.extend([term, term, term, term])
+            params.extend([term, term, term, term, term])
 
         if start_date:
             clauses.append("data >= ?")
@@ -208,7 +253,10 @@ class DatabaseManager:
             params.append(MovementType.from_db(movement_type).storage_value)
 
         query = """
-            SELECT id, tipo, valor, descricao, categoria, metodo, pessoa, data, anexo
+            SELECT
+                id, tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
+                grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                valor_comissao_tecnico, valor_empresa
             FROM movimentos
         """
         if clauses:
@@ -249,6 +297,68 @@ class DatabaseManager:
         with closing(self.connect()) as con:
             rows = con.execute(f"SELECT id, nome FROM {table_name} ORDER BY LOWER(nome)").fetchall()
         return [RegistryItem(id=row["id"], nome=row["nome"]) for row in rows]
+
+    def list_technicians(self) -> list[Technician]:
+        """Lista técnicos com comissão e status."""
+        with closing(self.connect()) as con:
+            rows = con.execute(
+                """
+                SELECT id, nome, percentual_comissao, status
+                FROM tecnicos
+                ORDER BY LOWER(nome)
+                """
+            ).fetchall()
+        return [
+            Technician(
+                id=row["id"],
+                nome=row["nome"],
+                percentual_comissao=float(row["percentual_comissao"]),
+                status=row["status"],
+            )
+            for row in rows
+        ]
+
+    def add_technician(self, technician: Technician) -> Technician:
+        """Adiciona técnico ao cadastro."""
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                INSERT INTO tecnicos (nome, percentual_comissao, status)
+                VALUES (?, ?, ?)
+                """,
+                (technician.nome, technician.percentual_comissao, technician.status),
+            )
+            con.commit()
+            technician.id = int(cur.lastrowid)
+            return technician
+
+    def update_technician(self, technician: Technician) -> None:
+        """Atualiza técnico sem alterar serviços já lançados."""
+        if technician.id is None:
+            raise ValueError("Técnico não encontrado.")
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                UPDATE tecnicos
+                SET nome = ?, percentual_comissao = ?, status = ?
+                WHERE id = ?
+                """,
+                (technician.nome, technician.percentual_comissao, technician.status, technician.id),
+            )
+            if cur.rowcount == 0:
+                raise ValueError("Técnico não encontrado.")
+            con.commit()
+
+    def delete_technician(self, technician_id: int) -> None:
+        """Exclui técnico do cadastro."""
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM tecnicos WHERE id = ?", (technician_id,))
+            if cur.rowcount == 0:
+                raise ValueError("Técnico não encontrado.")
+            con.commit()
 
     def add_registry_item(self, table_name: str, name: str) -> RegistryItem:
         """Adiciona item em tabela auxiliar de cadastro."""
