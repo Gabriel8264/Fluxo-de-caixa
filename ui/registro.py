@@ -21,6 +21,7 @@ from ui.widgets import DateMaskEntry, MarqueeLabel, SectionFrame
 class RegisterView(ctk.CTkScrollableFrame):
     """View de registro de entradas e saidas com suporte a anexos."""
 
+    DEFAULT_PERSON = "Clientes diversos"
     SERVICE_OPERATION = "serviço técnico"
 
     def __init__(
@@ -41,46 +42,22 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.grid_columnconfigure(0, weight=1)
 
         self._build_header()
-        self._build_tabs()
+        self._build_form()
 
     def _build_header(self) -> None:
         """Cria o cabecalho explicativo da tela de registro."""
         spacer = ctk.CTkFrame(self, fg_color="transparent", height=2)
         spacer.grid(row=0, column=0, sticky="ew")
 
-    def _build_tabs(self) -> None:
-        """Separa a tela entre lancamento e apoio operacional."""
-        self.tabs = ctk.CTkTabview(
-            self,
-            fg_color="transparent",
-            segmented_button_fg_color=COLORS["surface_alt"],
-            segmented_button_selected_color=COLORS["primary"],
-            segmented_button_selected_hover_color=COLORS["primary_hover"],
-            segmented_button_unselected_color=COLORS["surface_alt"],
-            text_color=COLORS["text"],
-        )
-        self.tabs.grid(row=1, column=0, sticky="nsew")
-        self.tabs.add("Lançamento")
-        self.tabs.add("Apoio")
-
-        self.form_tab = self.tabs.tab("Lançamento")
-        self.form_tab.grid_columnconfigure(0, weight=1)
-
-        self.support_tab = self.tabs.tab("Apoio")
-        self.support_tab.grid_columnconfigure(0, weight=1)
-
-        self._build_form()
-        self._build_support()
-
     def _build_form(self) -> None:
         """Monta o formulario principal de cadastro da movimentacao."""
         section = SectionFrame(
-            self.form_tab,
+            self,
             title="Dados da movimentação",
             subtitle=None,
             subtitle_wraplength=840,
         )
-        section.grid(row=0, column=0, sticky="nsew", pady=(4, 0))
+        section.grid(row=1, column=0, sticky="nsew", pady=(2, 0))
         section.grid_columnconfigure(0, weight=1)
         section.grid_columnconfigure(1, weight=1)
 
@@ -251,43 +228,6 @@ class RegisterView(ctk.CTkScrollableFrame):
         ).grid(row=14, column=0, columnspan=2, padx=20, pady=(10, 20), sticky="ew")
         self._handle_operation_change()
 
-    def _build_support(self) -> None:
-        """Renderiza orientacoes curtas para uso consistente da tela."""
-        support = SectionFrame(
-            self.support_tab,
-            title="Apoio ao lançamento",
-            subtitle="Atalhos úteis.",
-            subtitle_wraplength=820,
-        )
-        support.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
-        support.grid_columnconfigure(0, weight=1)
-
-        tips = [
-            "Use categoria e pessoa para localizar registros depois.",
-            "O botão Hoje preenche a data atual.",
-            "Anexos ajudam a guardar comprovantes.",
-        ]
-        for index, text in enumerate(tips, start=2):
-            ctk.CTkLabel(
-                support,
-                text=f"- {text}",
-                wraplength=760,
-                justify="left",
-                anchor="w",
-                text_color=COLORS["text"],
-                font=FONTS["body"],
-            ).grid(row=index, column=0, sticky="ew", padx=20, pady=8)
-
-        ctk.CTkButton(
-            support,
-            text="Gerenciar cadastros",
-            command=self.on_open_registries,
-            fg_color=COLORS["surface_alt"],
-            text_color=COLORS["text"],
-            hover_color="#dfe7f3",
-            height=44,
-        ).grid(row=6, column=0, sticky="ew", padx=20, pady=(18, 20))
-
     def _build_service_metric(self, master, row: int, column: int, title: str) -> dict[str, ctk.CTkLabel]:
         """Cria um bloco de resumo para o fluxo financeiro do serviço técnico."""
         box = ctk.CTkFrame(master, fg_color=COLORS["surface"], corner_radius=14)
@@ -357,16 +297,16 @@ class RegisterView(ctk.CTkScrollableFrame):
     def set_type(self, movement_type: str) -> None:
         """Permite abrir a tela ja focada em entrada ou saida."""
         self.type_selector.set(MovementType.from_db(movement_type).value)
-        self.tabs.set("Lançamento")
         self._handle_operation_change()
+        self._apply_default_person()
 
     def refresh(self) -> None:
         """Recarrega categorias e pessoas disponiveis para selecao."""
+        self._ensure_default_person()
         categories = [item.nome for item in self.service.list_categories()]
         people = [item.nome for item in self.service.list_people()]
         technicians = self.service.list_technicians(include_inactive=False)
         self._technician_map = {item.nome: item for item in technicians}
-        current_person = self.person_selector.get()
         current_category = self.category_selector.get()
         current_technician = self.technician_selector.get()
         self.category_selector.configure(values=categories or ["Sem categorias"])
@@ -376,12 +316,7 @@ class RegisterView(ctk.CTkScrollableFrame):
             preferred_category = current_category if current_category in categories else categories[0]
             self.category_selector.set(preferred_category)
         if people:
-            if current_person in people:
-                self.person_selector.set(current_person)
-            elif "Pessoas diversas" in people:
-                self.person_selector.set("Pessoas diversas")
-            else:
-                self.person_selector.set(people[0])
+            self._apply_default_person()
         if self._technician_map:
             preferred_technician = current_technician if current_technician in self._technician_map else next(iter(self._technician_map))
             self.technician_selector.set(preferred_technician)
@@ -479,7 +414,23 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.method_selector.set(PAYMENT_METHODS[0])
         self.clear_attachment()
         self.type_selector.set(current_operation)
+        self._apply_default_person()
         self._handle_operation_change()
+
+    def _ensure_default_person(self) -> None:
+        """Garante que o cadastro padrão de cliente exista antes de montar o combo."""
+        people = [item.nome for item in self.service.list_people()]
+        if self.DEFAULT_PERSON in people:
+            return
+        self.service.add_person(self.DEFAULT_PERSON)
+
+    def _apply_default_person(self) -> None:
+        """Define o cliente padrão em toda reinicialização do formulário."""
+        values = list(self.person_selector.cget("values") or [])
+        if self.DEFAULT_PERSON in values:
+            self.person_selector.set(self.DEFAULT_PERSON)
+        elif values and values[0] != "Sem cadastros":
+            self.person_selector.set(values[0])
 
     @staticmethod
     def _currency(value: float) -> str:

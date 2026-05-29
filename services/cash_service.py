@@ -148,6 +148,7 @@ class CashService:
         anexo: str = "",
     ) -> Movement:
         """Valida e atualiza uma movimentacao existente."""
+        existing = self.repository.get_movement(movement_id)
         movement = self._build_movement(
             tipo=tipo,
             valor=valor,
@@ -159,6 +160,12 @@ class CashService:
             anexo=anexo,
         )
         movement.id = movement_id
+        movement.grupo_servico = existing.grupo_servico
+        movement.papel_servico = existing.papel_servico
+        movement.tecnico = existing.tecnico
+        movement.percentual_comissao_tecnico = existing.percentual_comissao_tecnico
+        movement.valor_comissao_tecnico = existing.valor_comissao_tecnico
+        movement.valor_empresa = existing.valor_empresa
         self.repository.update_movement(movement)
         return movement
 
@@ -197,6 +204,10 @@ class CashService:
         """Lista movimentos pertencentes apenas ao fluxo ativo do dia."""
         active_day = self.get_active_day()
         return self.repository.fetch_movements(start_date=active_day, end_date=active_day, limit=limit)
+
+    def get_movement(self, movement_id: int) -> Movement:
+        """Retorna um movimento especifico preservando compatibilidade com legado."""
+        return self.repository.get_movement(movement_id)
 
     def get_summary(self, *, active_day_only: bool = False) -> dict[str, object]:
         """Retorna resumo financeiro geral ou apenas do dia ativo."""

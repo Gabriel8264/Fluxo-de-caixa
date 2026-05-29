@@ -2,6 +2,10 @@
 
 Este arquivo foi pensado para acelerar futuras alteracoes no projeto.
 
+Complemento recomendado:
+
+- `docs/GABARITO_OPERACIONAL.md`
+
 ## 1. Onde mexer em cada tipo de pedido
 
 ### Layout geral e navegacao
@@ -64,9 +68,10 @@ Este arquivo foi pensado para acelerar futuras alteracoes no projeto.
 1. Identificar a tela ou modulo afetado
 2. Confirmar se a logica esta na UI ou no servico
 3. Fazer a mudanca na menor area possivel
-4. Validar compilacao
-5. Instanciar `App()` para smoke test rapido
-6. Se for mudanca visual, abrir a tela e conferir uso real
+4. Pensar em impacto no resultado final do usuario e no legado
+5. Validar compilacao
+6. Instanciar `App()` para smoke test rapido
+7. Se for mudanca visual, abrir a tela e conferir uso real
 
 ## 3. Checklist de validacao rapida
 

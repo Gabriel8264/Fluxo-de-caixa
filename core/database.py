@@ -157,10 +157,29 @@ class DatabaseManager:
                     movement.valor_empresa,
                 ),
             )
+            movement_id = int(cur.lastrowid)
             cur.execute("INSERT OR IGNORE INTO categorias (nome) VALUES (?)", (movement.categoria,))
             cur.execute("INSERT OR IGNORE INTO pessoas (nome) VALUES (?)", (movement.pessoa,))
             con.commit()
-            return int(cur.lastrowid)
+            return movement_id
+
+    def get_movement(self, movement_id: int) -> Movement:
+        """Busca um movimento especifico com fallback seguro para bases legadas."""
+        with closing(self.connect()) as con:
+            row = con.execute(
+                """
+                SELECT
+                    id, tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
+                    grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                    valor_comissao_tecnico, valor_empresa
+                FROM movimentos
+                WHERE id = ?
+                """,
+                (movement_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError("Registro não encontrado.")
+        return self._row_to_movement(row)
 
     def update_movement(self, movement: Movement) -> None:
         """Atualiza um movimento existente e mantem cadastros auxiliares coerentes."""
@@ -268,7 +287,7 @@ class DatabaseManager:
 
         with closing(self.connect()) as con:
             rows = con.execute(query, params).fetchall()
-        return [Movement(**dict(row)) for row in rows]
+        return [self._row_to_movement(row) for row in rows]
 
     def fetch_movements_by_day(self, day: str) -> list[Movement]:
         """Retorna todos os movimentos de um dia especifico."""
@@ -435,3 +454,25 @@ class DatabaseManager:
                 """
             ).fetchall()
         return [CycleSummary(**dict(row)) for row in rows]
+
+    @staticmethod
+    def _row_to_movement(row: sqlite3.Row) -> Movement:
+        """Normaliza linhas do banco para Movement sem quebrar registros antigos."""
+        data = dict(row)
+        return Movement(
+            id=data.get("id"),
+            tipo=str(data.get("tipo") or "entrada"),
+            valor=float(data.get("valor") or 0.0),
+            descricao=str(data.get("descricao") or ""),
+            categoria=str(data.get("categoria") or ""),
+            metodo=str(data.get("metodo") or ""),
+            pessoa=str(data.get("pessoa") or ""),
+            data=str(data.get("data") or ""),
+            anexo=str(data.get("anexo") or ""),
+            grupo_servico=str(data.get("grupo_servico") or ""),
+            papel_servico=str(data.get("papel_servico") or ""),
+            tecnico=str(data.get("tecnico") or ""),
+            percentual_comissao_tecnico=float(data.get("percentual_comissao_tecnico") or 0.0),
+            valor_comissao_tecnico=float(data.get("valor_comissao_tecnico") or 0.0),
+            valor_empresa=float(data.get("valor_empresa") or 0.0),
+        )

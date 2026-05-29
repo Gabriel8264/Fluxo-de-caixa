@@ -81,6 +81,7 @@ Saida esperada:
 - Arquitetura e fluxo interno: `docs/ARQUITETURA.md`
 - Guia de manutencao rapida: `docs/GUIA_DE_MANUTENCAO.md`
 - Estrutura completa da aba Historico: `docs/HISTORICO.md`
+- Gabarito operacional de trabalho: `docs/GABARITO_OPERACIONAL.md`
 
 ## Observacoes importantes
 
