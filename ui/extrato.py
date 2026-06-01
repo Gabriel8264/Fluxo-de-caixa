@@ -13,7 +13,7 @@ from core.models import MovementType
 from services.attachments import attachment_name, open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, DetailMarqueeBar, SectionFrame, build_treeview_style
+from ui.widgets import DateMaskEntry, DetailMarqueeBar, SectionFrame, build_treeview_style, bind_treeview_mousewheel
 
 
 class StatementView(ctk.CTkFrame):
@@ -182,6 +182,7 @@ class StatementView(ctk.CTkFrame):
         self.tree.grid(row=0, column=0, sticky="nsew")
         y_scroll.grid(row=0, column=1, sticky="ns")
         x_scroll.grid(row=1, column=0, sticky="ew")
+        bind_treeview_mousewheel(self.tree, units_per_step=3)
         self.tree.bind("<<TreeviewSelect>>", self._update_selected_detail)
 
     def refresh(self) -> None:

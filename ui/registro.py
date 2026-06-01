@@ -15,7 +15,7 @@ from core.models import MovementType, PAYMENT_METHODS
 from services.attachments import open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, MarqueeLabel, SectionFrame
+from ui.widgets import DateMaskEntry, MarqueeLabel, SectionFrame, _bind_scrollable_mousewheel
 
 
 class RegisterView(ctk.CTkScrollableFrame):
@@ -43,6 +43,7 @@ class RegisterView(ctk.CTkScrollableFrame):
 
         self._build_header()
         self._build_form()
+        _bind_scrollable_mousewheel(self, units_per_step=4)
 
     def _build_header(self) -> None:
         """Cria o cabecalho explicativo da tela de registro."""

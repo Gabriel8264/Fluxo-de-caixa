@@ -17,7 +17,7 @@ from services.cash_service import CashService
 from services.excel import exportar_excel
 from services.pdf import gerar_pdf
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style
+from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps, bind_treeview_mousewheel
 
 
 class HistoryView(ctk.CTkFrame):
@@ -83,7 +83,6 @@ class HistoryView(ctk.CTkFrame):
         self.selected_movement_id: int | None = None
         self._suspend_events = False
         self.active_tab_name = "Resumo"
-        self._mousewheel_active = False
         self._tab_dirty: dict[str, bool] = {
             "Resumo": True,
             "Entradas e saídas": True,
@@ -126,22 +125,8 @@ class HistoryView(ctk.CTkFrame):
 
         self.viewport.bind("<Configure>", self._sync_scroll_region)
         self.canvas.bind("<Configure>", self._sync_viewport_width)
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.viewport.bind("<MouseWheel>", self._on_mousewheel)
-        self.bind("<Enter>", self._activate_global_mousewheel, add="+")
-        self.bind("<Leave>", self._schedule_mousewheel_deactivation, add="+")
-        self.viewport.bind("<Enter>", self._activate_global_mousewheel, add="+")
-        self.viewport.bind("<Leave>", self._schedule_mousewheel_deactivation, add="+")
-
-        ctk.CTkLabel(
-            self.viewport,
-            text="Histórico",
-            font=FONTS["title"],
-            text_color=COLORS["text"],
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
-
         self.body = ctk.CTkFrame(self.viewport, fg_color=COLORS["bg"])
-        self.body.grid(row=1, column=0, sticky="ew")
+        self.body.grid(row=0, column=0, sticky="ew")
         self.body.grid_columnconfigure(0, weight=1)
 
         self._build_selection_screen()
@@ -149,7 +134,10 @@ class HistoryView(ctk.CTkFrame):
         self._show_selection_screen()
 
         self.refresh()
-        self._bind_mousewheel_tree(self.viewport)
+        self._bind_history_mousewheel(self)
+        self._bind_history_mousewheel(self.canvas)
+        self._bind_history_mousewheel(self.viewport)
+        self._bind_history_mousewheel(self.body)
 
     def _sync_scroll_region(self, _event=None) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -157,60 +145,32 @@ class HistoryView(ctk.CTkFrame):
     def _sync_viewport_width(self, event) -> None:
         self.canvas.itemconfigure(self.viewport_window, width=event.width)
 
-    def _on_mousewheel(self, event) -> None:
+    def _on_mousewheel(self, event) -> str | None:
         if not self.winfo_exists():
-            return
+            return None
         try:
             pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
             if pointer_widget is not None and hasattr(self, "records_tree") and self._is_widget_in_subtree(pointer_widget, self.records_tree):
-                self.records_tree.yview_scroll(int(-event.delta / 120), "units")
-                return "break"
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+                return None
+            steps = _mousewheel_steps(event)
+            if steps == 0:
+                return None
+            self.canvas.yview_scroll(steps * 4, "units")
+            return "break"
         except tk.TclError:
-            pass
+            return None
 
-    def _activate_global_mousewheel(self, _event=None) -> None:
-        if self._mousewheel_active:
-            return
+    def _bind_history_mousewheel(self, widget) -> None:
         try:
-            self.canvas.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
-            self._mousewheel_active = True
-        except tk.TclError:
-            pass
-
-    def _schedule_mousewheel_deactivation(self, _event=None) -> None:
-        self.after(10, self._deactivate_global_mousewheel_if_outside)
-
-    def _deactivate_global_mousewheel_if_outside(self) -> None:
-        if not self.winfo_exists():
-            return
-        pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
-        if pointer_widget is None:
-            self._deactivate_global_mousewheel()
-            return
-        parent = pointer_widget
-        while parent is not None:
-            if parent is self:
-                return
-            parent = parent.master
-        self._deactivate_global_mousewheel()
-
-    def _deactivate_global_mousewheel(self) -> None:
-        if not self._mousewheel_active:
-            return
-        try:
-            self.canvas.unbind_all("<MouseWheel>")
-        except tk.TclError:
-            pass
-        self._mousewheel_active = False
-
-    def _bind_mousewheel_tree(self, widget) -> None:
-        try:
-            widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
+            if not getattr(widget, "_history_mousewheel_bound", False):
+                widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
+                widget.bind("<Button-4>", self._on_mousewheel, add="+")
+                widget.bind("<Button-5>", self._on_mousewheel, add="+")
+                widget._history_mousewheel_bound = True
         except Exception:
             return
         for child in widget.winfo_children():
-            self._bind_mousewheel_tree(child)
+            self._bind_history_mousewheel(child)
 
     @staticmethod
     def _is_widget_in_subtree(widget, ancestor) -> bool:
@@ -470,6 +430,7 @@ class HistoryView(ctk.CTkFrame):
         self.records_tree.grid(row=0, column=0, sticky="nsew")
         tree_y.grid(row=0, column=1, sticky="ns")
         tree_x.grid(row=1, column=0, sticky="ew")
+        bind_treeview_mousewheel(self.records_tree, units_per_step=3)
         self.records_tree.bind("<<TreeviewSelect>>", self._handle_record_selection)
         self.records_tree.bind("<Double-1>", lambda _event: self._edit_selected_movement())
 
@@ -492,7 +453,6 @@ class HistoryView(ctk.CTkFrame):
         self.record_detail = SectionFrame(self.records_tab, title="Lançamento selecionado")
         self.record_detail.grid(row=3, column=0, sticky="ew")
         self.record_detail.grid_columnconfigure(0, weight=1)
-        self.record_detail.grid_columnconfigure(1, weight=1)
         self.detail_fields: dict[str, ctk.CTkLabel] = {}
 
     def _selector_box(self, master, row: int, column: int, title: str, *, padx: tuple[int, int]) -> ctk.CTkFrame:
@@ -514,12 +474,17 @@ class HistoryView(ctk.CTkFrame):
             values=values,
             command=command,
             height=40,
-            fg_color=COLORS["surface"],
-            button_color=COLORS["primary"],
-            button_hover_color=COLORS["primary_hover"],
+            corner_radius=12,
+            fg_color=COLORS["surface_alt"],
+            button_color="#dde7f3",
+            button_hover_color="#cedbec",
             text_color=COLORS["text"],
+            font=FONTS["body"],
             dropdown_fg_color=COLORS["surface"],
             dropdown_text_color=COLORS["text"],
+            dropdown_hover_color=COLORS["surface_alt"],
+            anchor="w",
+            dynamic_resizing=False,
         )
 
     def _ensure_valid_selection(self) -> None:
@@ -528,6 +493,7 @@ class HistoryView(ctk.CTkFrame):
             self.selected_year = None
             self.selected_month = None
             self.selected_day = None
+            self._bind_history_mousewheel(self.analysis_tab)
             return
 
         if self.selected_year not in years:
@@ -586,6 +552,7 @@ class HistoryView(ctk.CTkFrame):
 
     def _on_scope_change(self, value: str) -> None:
         if self._suspend_events:
+            self._bind_history_mousewheel(self.chart_tab)
             return
         self.active_scope = {"Ano": "year", "Mês": "month", "Dia": "day"}[value]
         self._ensure_valid_selection()
@@ -593,6 +560,7 @@ class HistoryView(ctk.CTkFrame):
 
     def _on_year_selected(self, value: str) -> None:
         if self._suspend_events or value == "Sem dados":
+            self._bind_history_mousewheel(self.records_tab)
             return
         self.selected_year = value
         self._ensure_valid_selection()
@@ -666,12 +634,15 @@ class HistoryView(ctk.CTkFrame):
         self.detail_visible = False
         self.detail_screen.grid_remove()
         self.selection_screen.grid()
+        self._bind_history_mousewheel(self.selection_screen)
         self._render_selection_preview()
 
     def _show_detail_screen(self) -> None:
         self.detail_visible = True
         self.selection_screen.grid_remove()
         self.detail_screen.grid()
+        self._bind_history_mousewheel(self.detail_screen)
+        self._bind_history_mousewheel(self.tab_container)
 
     def _show_tab(self, name: str) -> None:
         self.active_tab_name = name
@@ -719,7 +690,8 @@ class HistoryView(ctk.CTkFrame):
         else:
             self.detail_subtitle.configure(text=f"Período: {start_date} a {end_date}")
         self._render_active_tab()
-        self._bind_mousewheel_tree(self.viewport)
+        self._bind_history_mousewheel(self.detail_screen)
+        self._bind_history_mousewheel(self.tab_container)
 
     def _mark_tabs_dirty(self) -> None:
         for key in self._tab_dirty:
@@ -736,6 +708,7 @@ class HistoryView(ctk.CTkFrame):
             if self._tab_dirty["Resumo"]:
                 self._render_summary_tab(movements, summary)
                 self._tab_dirty["Resumo"] = False
+            self._bind_history_mousewheel(self.summary_tab)
             return
         if self.active_tab_name == "Entradas e saídas":
             if self._tab_dirty["Entradas e saídas"]:
@@ -852,6 +825,7 @@ class HistoryView(ctk.CTkFrame):
                 f"Dia com maior movimento: {self._day_with_highest_volume(list(self.current_scope_data['timeline']))}",
             ],
         )
+        self._bind_history_mousewheel(self.summary_tab)
 
     def _render_flows_tab(self, movements: list[Movement]) -> None:
         self._clear_container(self.flows_tab)
@@ -868,6 +842,7 @@ class HistoryView(ctk.CTkFrame):
         exits_box.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         exits_box.grid_columnconfigure(0, weight=1)
         self._render_flow_cards(exits_box, saidas, COLORS["danger"], limit=self.flow_exit_limit, more_command=self._load_more_exits)
+        self._bind_history_mousewheel(self.flows_tab)
 
     def _render_analysis_tab(self, movements: list[Movement], summary: dict[str, object]) -> None:
         self._clear_container(self.analysis_tab)
@@ -916,6 +891,7 @@ class HistoryView(ctk.CTkFrame):
                 f"Principal método: {self._top_group(movements, 'metodo')}",
             ],
         )
+        self._bind_history_mousewheel(self.analysis_tab)
 
     def _render_chart_tab(self, movements: list[Movement], summary: dict[str, object], timeline: list[dict[str, object]]) -> None:
         self._clear_container(self.chart_tab)
@@ -951,6 +927,7 @@ class HistoryView(ctk.CTkFrame):
         outgoing.grid(row=2, column=0, columnspan=2, sticky="ew")
         outgoing.grid_columnconfigure(0, weight=1)
         self._render_group_bars(outgoing, self._group_values(saidas, "categoria"), COLORS["danger"])
+        self._bind_history_mousewheel(self.chart_tab)
 
     def _render_records_tab(self, movements: list[Movement]) -> None:
         categories = ["Todas as categorias"] + sorted({movement.categoria for movement in movements})
@@ -979,6 +956,7 @@ class HistoryView(ctk.CTkFrame):
         self._refresh_sort_button_text()
 
         self._apply_record_filters()
+        self._bind_history_mousewheel(self.records_tab)
 
     def _apply_record_filters(self) -> None:
         movements = list(self.current_scope_data["movements"]) if self.current_scope_data else []
@@ -1069,27 +1047,62 @@ class HistoryView(ctk.CTkFrame):
         self.edit_button.configure(state="normal")
         self.delete_button.configure(state="normal")
         self.open_attachment_button.configure(state="normal" if movement.anexo else "disabled")
+        summary_line = f"{movement.formatted_date} · {movement.movement_type.label} · {movement.categoria}"
+        value_color = COLORS["success"] if movement.movement_type is MovementType.ENTRADA else COLORS["danger"]
 
-        details = [
-            ("Data", movement.formatted_date),
-            ("Tipo", movement.movement_type.label),
-            ("Valor", self._signed_currency(movement)),
-            ("Categoria", movement.categoria),
-            ("Método", movement.metodo),
-            ("Pessoa / empresa", movement.pessoa),
+        ctk.CTkLabel(
+            self.record_detail,
+            text=summary_line,
+            font=FONTS["body_bold"],
+            text_color=COLORS["text"],
+            anchor="w",
+            justify="left",
+        ).grid(row=2, column=0, sticky="w", padx=18, pady=(0, 6))
+
+        ctk.CTkLabel(
+            self.record_detail,
+            text=self._signed_currency(movement),
+            font=("Segoe UI Semibold", 22),
+            text_color=value_color,
+            anchor="w",
+        ).grid(row=3, column=0, sticky="w", padx=18, pady=(0, 14))
+
+        details_grid = ctk.CTkFrame(self.record_detail, fg_color=COLORS["surface_alt"], corner_radius=14)
+        details_grid.grid(row=4, column=0, sticky="ew", padx=18, pady=(0, 14))
+        details_grid.grid_columnconfigure(0, weight=1)
+        details_grid.grid_columnconfigure(1, weight=1)
+
+        compact_fields = [
+            ("Pessoa / empresa", movement.pessoa or "-"),
+            ("Método", movement.metodo or "-"),
             ("Descrição", movement.descricao or "-"),
             ("Anexo", attachment_name(movement.anexo)),
         ]
 
-        for index, (label, value) in enumerate(details):
-            row = 2 + (index // 2) * 2
+        for index, (label, value) in enumerate(compact_fields):
+            row = index // 2
             column = index % 2
-            field = ctk.CTkFrame(self.record_detail, fg_color=COLORS["surface_alt"], corner_radius=16)
-            field.grid(row=row, column=column, sticky="ew", padx=((18, 10) if column == 0 else (10, 18)), pady=(0, 12))
-            field.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(field, text=label, font=FONTS["small"], text_color=COLORS["muted"], anchor="w").grid(row=0, column=0, sticky="w", padx=14, pady=(12, 4))
-            ctk.CTkLabel(field, text=value, font=FONTS["body_bold"], text_color=COLORS["text"], anchor="w", justify="left", wraplength=420).grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 12))
-        self._bind_mousewheel_tree(self.record_detail)
+            block = ctk.CTkFrame(details_grid, fg_color="transparent")
+            block.grid(row=row, column=column, sticky="ew", padx=((14, 10) if column == 0 else (10, 14)), pady=(12 if row == 0 else 6, 6 if row == 0 else 12))
+            block.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(
+                block,
+                text=label,
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+                anchor="w",
+            ).grid(row=0, column=0, sticky="w")
+            ctk.CTkLabel(
+                block,
+                text=value,
+                font=FONTS["body"],
+                text_color=COLORS["text"],
+                anchor="w",
+                justify="left",
+                wraplength=420,
+            ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+
+        self._bind_history_mousewheel(self.record_detail)
 
     def _reset_record_filters(self) -> None:
         self.search_entry.delete(0, "end")
@@ -1358,7 +1371,6 @@ class HistoryView(ctk.CTkFrame):
         return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     def destroy(self) -> None:
-        self._deactivate_global_mousewheel()
         super().destroy()
 
 
@@ -1393,6 +1405,7 @@ class MovementEditorDialog(ctk.CTkToplevel):
         self.scroll = ctk.CTkScrollableFrame(self, fg_color=COLORS["bg"])
         self.scroll.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         self.scroll.grid_columnconfigure(0, weight=1)
+        _bind_scrollable_mousewheel(self.scroll, units_per_step=4)
 
         ctk.CTkLabel(self.scroll, text="Editar registro", font=FONTS["title"], text_color=COLORS["text"]).grid(row=0, column=0, sticky="w", pady=(0, 14))
 
@@ -1422,6 +1435,18 @@ class MovementEditorDialog(ctk.CTkToplevel):
         self.attachment_label.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         ctk.CTkButton(attachment_row, text="Selecionar arquivo", command=self._choose_attachment, height=38, fg_color=COLORS["surface_alt"], hover_color="#dfe7f3", text_color=COLORS["text"]).grid(row=0, column=1, padx=(0, 10))
         ctk.CTkButton(attachment_row, text="Limpar", command=self._clear_attachment, height=38, fg_color=COLORS["surface_alt"], hover_color="#dfe7f3", text_color=COLORS["text"]).grid(row=0, column=2)
+        self.open_attachment_button = ctk.CTkButton(
+            attachment_row,
+            text="Abrir anexo",
+            command=self._open_attachment,
+            height=38,
+            width=120,
+            state="disabled",
+            fg_color=COLORS["surface_alt"],
+            hover_color="#dfe7f3",
+            text_color=COLORS["text"],
+        )
+        self.open_attachment_button.grid(row=0, column=3, padx=(10, 0))
 
         actions = ctk.CTkFrame(self.scroll, fg_color=COLORS["bg"])
         actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
@@ -1464,16 +1489,25 @@ class MovementEditorDialog(ctk.CTkToplevel):
         self.date_entry.set(self.movement.formatted_date)
         self.method_selector.set(self.movement.metodo)
         self.attachment_label.configure(text=attachment_name(self.attachment_path))
+        self.open_attachment_button.configure(state="normal" if self.attachment_path else "disabled")
 
     def _choose_attachment(self) -> None:
         path = filedialog.askopenfilename(title="Selecionar arquivo")
         if path:
             self.attachment_path = path
             self.attachment_label.configure(text=attachment_name(path))
+            self.open_attachment_button.configure(state="normal")
 
     def _clear_attachment(self) -> None:
         self.attachment_path = ""
         self.attachment_label.configure(text="Sem anexo")
+        self.open_attachment_button.configure(state="disabled")
+
+    def _open_attachment(self) -> None:
+        try:
+            open_attachment(self.attachment_path)
+        except (ValueError, FileNotFoundError) as exc:
+            messagebox.showerror("Anexo indisponível", str(exc))
 
     def _save(self) -> None:
         try:

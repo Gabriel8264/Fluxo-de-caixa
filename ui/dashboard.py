@@ -16,7 +16,7 @@ from core.models import Movement, MovementType
 from services.attachments import attachment_name, open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import Card, DetailMarqueeBar, MetricBadge, SectionFrame, build_treeview_style
+from ui.widgets import Card, DetailMarqueeBar, MetricBadge, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, bind_treeview_mousewheel
 
 
 class DashboardView(ctk.CTkScrollableFrame):
@@ -44,6 +44,7 @@ class DashboardView(ctk.CTkScrollableFrame):
 
         self._build_header()
         self._build_tabs()
+        _bind_scrollable_mousewheel(self, units_per_step=4)
 
     def _build_header(self) -> None:
         """Cria cabecalho com status do fluxo e acoes principais."""
@@ -232,6 +233,7 @@ class DashboardView(ctk.CTkScrollableFrame):
         self.recent_tree.grid(row=0, column=0, sticky="nsew")
         y_scroll.grid(row=0, column=1, sticky="ns")
         x_scroll.grid(row=1, column=0, sticky="ew")
+        bind_treeview_mousewheel(self.recent_tree, units_per_step=3)
         self.recent_tree.bind("<<TreeviewSelect>>", self._update_selected_detail)
 
     def _build_analytics_tab(self) -> None:

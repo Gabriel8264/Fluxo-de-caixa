@@ -92,6 +92,7 @@ Complemento recomendado:
 - testar selecao por `Mes`
 - testar selecao por `Dia`
 - abrir `Resumo`
+- abrir `Entradas e saidas`
 - abrir `Analise`
 - abrir `Grafico`
 - abrir `Registros`
@@ -127,12 +128,28 @@ Complemento recomendado:
 `ui/historico.py` mistura:
 
 - navegacao do recorte
+- scroll principal da pagina
 - renderizacao dos cards
 - desenho dos graficos
 - tabela e detalhe de registros
 - modal de edicao
 
 Se a mudanca for grande, vale atuar por bloco e nao em tudo ao mesmo tempo.
+
+### Rolagem
+
+Hoje existem tres padroes de rolagem no projeto:
+
+- `CTkScrollableFrame` com bind helper em `ui/widgets.py`
+- `Canvas + scrollbar` no Historico principal
+- `Treeview` com scroll proprio nas tabelas
+
+Ao mexer em rolagem:
+
+- evitar `bind_all` global
+- evitar scroll duplicado na mesma area
+- manter apenas um scroll principal por tela, exceto tabelas
+- se houver tabela `Treeview`, a roda do mouse em cima dela deve mover apenas a tabela
 
 ### Textos com acentos
 

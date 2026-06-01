@@ -24,7 +24,7 @@ Este repositorio foi organizado para facilitar manutencao, refinamentos visuais 
 - Novo registro com anexo, mascara de data e selecao de categoria e pessoa
 - Consultas e filtros com extrato e abertura de anexos
 - Cadastros de categorias e pessoas/empresas
-- Historico por ano, mes e dia com resumo, analise, graficos e registros
+- Historico por ano, mes e dia com resumo, entradas e saidas, analise, graficos e registros
 - Edicao e exclusao de registros no historico
 - Exportacao do periodo selecionado para Excel e PDF
 - Execucao portatil com banco e estado gravados ao lado do executavel
@@ -89,3 +89,4 @@ Saida esperada:
 - As exportacoes de Excel e PDF foram implementadas sem depender de bibliotecas externas de exportacao.
 - O app foi preparado para rodar em modo portatil: banco SQLite e `session_state.json` ficam ao lado do executavel.
 - Sempre que houver alteracao visual importante, vale validar especialmente `ui/app.py`, `ui/historico.py`, `ui/dashboard.py` e `ui/registro.py`.
+- A rolagem do Historico foi centralizada em um unico scroll principal baseado em `Canvas`; a tabela de registros mantem scroll proprio apenas para a grade.

@@ -15,6 +15,75 @@ import customtkinter as ctk
 from ui.theme import COLORS, FONTS
 
 
+def _mousewheel_steps(event) -> int:
+    """Normaliza a intensidade da roda do mouse para widgets Tk."""
+
+    delta = getattr(event, "delta", 0)
+    if delta:
+        steps = int(-delta / 120)
+        return steps if steps != 0 else (-1 if delta > 0 else 1)
+    num = getattr(event, "num", None)
+    if num == 4:
+        return -1
+    if num == 5:
+        return 1
+    return 0
+
+
+def _bind_scrollable_mousewheel(scrollable_frame: ctk.CTkScrollableFrame, *, units_per_step: int = 4) -> None:
+    """Liga a roda do mouse ao canvas interno do CTkScrollableFrame."""
+
+    canvas = getattr(scrollable_frame, "_parent_canvas", None)
+    if canvas is None:
+        return
+
+    def on_mousewheel(event) -> str | None:
+        try:
+            steps = _mousewheel_steps(event)
+            if steps == 0:
+                return None
+            canvas.yview_scroll(steps * units_per_step, "units")
+            return "break"
+        except tk.TclError:
+            return None
+
+    def bind_tree(widget) -> None:
+        try:
+            if not getattr(widget, "_codex_mousewheel_bound", False):
+                widget.bind("<MouseWheel>", on_mousewheel, add="+")
+                widget.bind("<Button-4>", on_mousewheel, add="+")
+                widget.bind("<Button-5>", on_mousewheel, add="+")
+                widget._codex_mousewheel_bound = True
+        except Exception:
+            return
+        for child in widget.winfo_children():
+            bind_tree(child)
+
+    bind_tree(scrollable_frame)
+
+
+def bind_treeview_mousewheel(tree: ttk.Treeview, *, units_per_step: int = 3) -> None:
+    """Garante rolagem consistente da roda do mouse em tabelas ttk."""
+
+    if getattr(tree, "_codex_mousewheel_bound", False):
+        return
+
+    def on_mousewheel(event) -> str | None:
+        try:
+            steps = _mousewheel_steps(event)
+            if steps == 0:
+                return None
+            tree.yview_scroll(steps * units_per_step, "units")
+            return "break"
+        except tk.TclError:
+            return None
+
+    tree.bind("<MouseWheel>", on_mousewheel, add="+")
+    tree.bind("<Button-4>", on_mousewheel, add="+")
+    tree.bind("<Button-5>", on_mousewheel, add="+")
+    tree._codex_mousewheel_bound = True
+
+
 class MarqueeLabel(ctk.CTkFrame):
     """Label com rolagem horizontal automatica para textos longos."""
 
@@ -290,6 +359,7 @@ class RegistryManagerFrame(SectionFrame):
         self.list_area = ctk.CTkScrollableFrame(self, fg_color=COLORS["surface_alt"], corner_radius=18)
         self.list_area.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 16))
         self.list_area.grid_columnconfigure(0, weight=1)
+        _bind_scrollable_mousewheel(self.list_area, units_per_step=48)
 
     def refresh(self) -> None:
         """Reconstroi a lista visual de itens cadastrados."""
@@ -328,6 +398,7 @@ class RegistryManagerFrame(SectionFrame):
                 text_color="#a33434",
                 hover_color="#fecaca",
             ).grid(row=0, column=2, padx=(0, 10), pady=8)
+        _bind_scrollable_mousewheel(self.list_area, units_per_step=48)
 
     def select_item(self, item_id: int, name: str) -> None:
         """Carrega um item existente no formulario para edicao."""
@@ -452,6 +523,7 @@ class TechnicianManagerFrame(SectionFrame):
         self.list_area = ctk.CTkScrollableFrame(self, fg_color=COLORS["surface_alt"], corner_radius=18)
         self.list_area.grid(row=5, column=0, sticky="nsew", padx=16, pady=(0, 16))
         self.list_area.grid_columnconfigure(0, weight=1)
+        _bind_scrollable_mousewheel(self.list_area, units_per_step=48)
 
     def _refresh_company_percent(self) -> None:
         raw = self.commission_entry.get().strip().replace("%", "").replace(",", ".")
@@ -512,6 +584,7 @@ class TechnicianManagerFrame(SectionFrame):
                 text_color="#a33434",
                 hover_color="#fecaca",
             ).grid(row=0, column=2, rowspan=2, padx=(0, 10), pady=8)
+        _bind_scrollable_mousewheel(self.list_area, units_per_step=48)
 
     def select_item(self, technician) -> None:
         """Carrega técnico no formulário para edição."""

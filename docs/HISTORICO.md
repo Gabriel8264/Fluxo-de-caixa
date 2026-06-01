@@ -1,6 +1,6 @@
 # Aba Historico
 
-Este documento explica a estrutura atual da aba `Historico`, que hoje e a parte mais complexa da interface.
+Este documento descreve a implementacao atual da aba `Historico`.
 
 Arquivo principal:
 
@@ -8,67 +8,97 @@ Arquivo principal:
 
 ## 1. Objetivo da tela
 
-Permitir leitura do historico por:
+Permitir leitura financeira por:
 
 - ano
 - mes
 - dia
 
-Cada periodo abre uma tela de leitura com:
+Cada periodo abre uma leitura dedicada com:
 
 - `Resumo`
+- `Entradas e saidas`
 - `Analise`
 - `Grafico`
 - `Registros`
 
-## 2. Estrutura visual atual
+## 2. Estrutura geral atual
 
-### Etapa 1: selecao
+### Tela 1: selecao do periodo
 
-Primeira tela exibida:
+Exibe:
 
 - seletor de `Nivel de leitura`
-- menu de `Ano`
-- menu de `Mes`
-- menu de `Dia`
-- preview textual do periodo
-- botao `Abrir visao ...`
+- seletor de `Ano`
+- seletor de `Mes`
+- seletor de `Dia`
+- preview do periodo
+- botao `Abrir periodo`
 
 Metodos principais:
 
 - `_build_selection_screen`
-- `_populate_selector_menus`
-- `_handle_scope_change`
+- `_refresh_selectors`
+- `_render_selection_preview`
+- `_on_scope_change`
 - `_on_year_selected`
 - `_on_month_selected`
 - `_on_day_selected`
-- `_update_selection_preview`
 
-### Etapa 2: leitura do periodo
+### Tela 2: leitura do periodo
 
-Segunda tela exibida:
+Exibe:
 
 - botao `Voltar`
 - titulo do periodo
-- subtitulo orientativo
-- faixa de metricas
-- abas de conteudo
+- subtitulo com intervalo
+- seletor manual de abas
+- painel de conteudo da aba ativa
 
 Metodos principais:
 
 - `_build_detail_screen`
-- `_show_scope_details`
-- `_load_scope_data`
-- `_render_detail_header`
-- `_render_metric_strip`
+- `_open_scope`
+- `_render_scope_data`
+- `_show_tab`
+- `_render_active_tab`
 
-## 3. Dados usados pela tela
+## 3. Estrategia de scroll
 
-A tela nao monta os dados diretamente do banco. Ela consome o pacote pronto retornado por:
+O Historico nao usa mais `CTkScrollableFrame` como container principal.
+
+Hoje a tela usa:
+
+- `tk.Canvas` como area principal de rolagem
+- `CTkScrollbar` vertical ligada ao canvas
+- um unico fluxo principal de scroll para a pagina
+
+Excecao:
+
+- a tabela de `Registros` usa `Treeview` com scroll proprio
+
+Regras atuais:
+
+- fora da tabela, a roda do mouse move a pagina do Historico
+- em cima da tabela, a roda do mouse move apenas a tabela
+- evitar `bind_all` global
+- evitar mais de um scroll principal na mesma tela
+
+Pontos principais no codigo:
+
+- `HistoryView.__init__`
+- `_sync_scroll_region`
+- `_sync_viewport_width`
+- `_on_mousewheel`
+- `_bind_history_mousewheel`
+
+## 4. Dados usados pela tela
+
+A tela recebe um pacote consolidado do servico:
 
 - `services/cash_service.py:get_history_scope_data`
 
-Esse pacote traz:
+Campos esperados:
 
 - `scope`
 - `label`
@@ -78,152 +108,192 @@ Esse pacote traz:
 - `summary`
 - `timeline`
 
-## 4. Aba Resumo
+Compatibilidade:
 
-Responsavel por leitura executiva do periodo.
+- registros antigos sem tecnico continuam validos
+- registros antigos sem comissao continuam validos
+- entradas e saidas antigas continuam validas
+- categoria antiga `Comissao` continua valida
 
-Metodos principais:
+## 5. Aba Resumo
+
+Entrega leitura financeira rapida do periodo.
+
+Blocos atuais:
+
+- `Resumo do periodo`
+- `Leitura do periodo`
+- `Destaques das entradas`
+- `Destaques das saidas`
+- `Origem do dinheiro`
+- `Destino do dinheiro`
+- `Sintese do fechamento`
+
+Metodo principal:
 
 - `_render_summary_tab`
-- `_build_overview_text`
-- `_build_distribution_text`
-- `_build_highlights_text`
-- `_build_rhythm_text`
 
-Quando alterar:
+Objetivo:
 
-- revisar textos
-- revisar cards
-- evitar excesso de informacao em um unico bloco
+- mostrar quanto entrou
+- mostrar quanto saiu
+- mostrar saldo
+- apontar principais origens e destinos do dinheiro
 
-## 5. Aba Analise
+## 6. Aba Entradas e saidas
 
-Responsavel por interpretacao do periodo.
+Separa os dois fluxos em colunas independentes.
 
-Metodos principais:
+Cada lado mostra:
+
+- total do grupo
+- lista de cards
+- paginação simples com `Carregar mais`
+
+Metodo principal:
+
+- `_render_flows_tab`
+
+Detalhe importante:
+
+- a tela limita a renderizacao inicial para evitar excesso de widgets
+- hoje o limite base e `flow_page_size = 30`
+
+## 7. Aba Analise
+
+Responsavel pela leitura mais interpretativa do periodo.
+
+Exibe indicadores como:
+
+- saldo liquido
+- peso das saidas sobre entradas
+- medias
+- participacao por categoria
+- quantidade de entradas
+- quantidade de saidas
+
+Metodo principal:
 
 - `_render_analysis_tab`
-- `_build_financial_diagnostic`
-- `_build_type_analysis`
-- `_group_values`
-- `_format_rank_items`
 
-Quando alterar:
+## 8. Aba Grafico
 
-- manter foco em leitura humana
-- priorizar diagnostico e nao apenas numeros crus
+Responsavel pelas leituras visuais do periodo.
 
-## 6. Aba Grafico
-
-Responsavel por graficos desenhados em `tk.Canvas`.
-
-### Visao anual e mensal
+Hoje a implementacao foi simplificada para estabilidade visual.
 
 Usa:
 
-- `_draw_timeline_chart`
-- `_render_chart_sidebar_for_timeline`
+- barras com `CTkProgressBar`
+- grupos resumidos por categoria
+- comparacao entre entradas, saidas e saldo
 
-Leitura:
+Metodo principal:
 
-- barras de entradas e saidas
-- linha de saldo
-- cards laterais explicativos
+- `_render_chart_tab`
 
-### Visao diaria
+Observacao:
 
-Usa:
+- esta aba deve priorizar estabilidade e leitura objetiva
+- evitar excesso de itens visuais no mesmo bloco
 
-- `_draw_composition_chart`
-- `_draw_horizontal_group`
-- `_render_chart_sidebar_for_day`
+## 9. Aba Registros
 
-Leitura:
-
-- cards de entradas, saidas e saldo
-- barras por categoria
-- barras por metodo
-- leitura auxiliar ao lado
-
-Quando alterar o grafico:
-
-- testar em resolucoes menores
-- evitar sobrepor texto com barras
-- limitar quantidade de itens exibidos
-- manter contraste alto
-
-## 7. Aba Registros
-
-Responsavel pela conferencia detalhada dos lancamentos do periodo.
+Responsavel pela conferencia detalhada dos lancamentos.
 
 Estrutura atual:
 
-- barra de busca
-- filtro por tipo
+- bloco `Filtros`
+- bloco `Movimentacoes` com `Treeview`
+- barra de acoes
+- ficha compacta `Detalhes do registro`
+
+Filtros atuais:
+
+- descricao
+- tipo
+- categoria
+- pessoa
+- metodo
 - ordenacao
-- tabela resumida
-- painel lateral com detalhes completos
-- acoes de editar, excluir, exportar e abrir anexo
 
 Metodos principais:
 
 - `_build_records_tab`
+- `_render_records_tab`
+- `_apply_record_filters`
 - `_render_records`
-- `_filtered_scope_movements`
-- `_sort_records_by_column`
-- `_update_selected_detail`
-- `_reset_records_state`
+- `_render_selected_movement`
 
-### Edicao
+## 10. Detalhes do registro
 
-Modal:
+Os detalhes do registro nao usam mais varios cards grandes separados.
+
+Hoje a leitura e uma ficha compacta unica:
+
+- linha superior com `Data · Tipo · Categoria`
+- valor destacado
+- campos abaixo:
+  - `Pessoa / empresa`
+  - `Metodo`
+  - `Descricao`
+  - `Anexo`
+
+Regras:
+
+- se houver anexo, o botao `Abrir anexo` da barra de acoes fica habilitado
+- se nao houver selecao, aparece uma mensagem simples
+
+## 11. Exportacao e edicao
+
+Na aba `Registros`:
+
+- editar registro
+- excluir registro
+- abrir anexo
+- exportar Excel
+- exportar PDF
+
+Modal de edicao:
 
 - `MovementEditorDialog`
 
-Integracoes:
+Esse modal usa `CTkScrollableFrame` proprio e bind de roda do mouse aplicado por helper.
 
-- `CashService.update_movement`
-- `CashService.delete_movement`
+## 12. Pontos sensiveis
 
-## 8. Fluxo de selecao
+- `ui/historico.py` continua grande
+- a tela mistura selecao, leitura, filtros, tabela, exportacao e modal
+- qualquer alteracao de layout deve ser testada com muito conteudo
+- a rolagem principal do Historico nao deve voltar a usar binds globais
 
-### Ano
+## 13. Checklist recomendado ao mexer no Historico
 
-1. selecionar `Ano`
-2. escolher o ano
-3. tela abre leitura anual
+- abrir selecao por `Ano`
+- abrir selecao por `Mes`
+- abrir selecao por `Dia`
+- trocar entre todas as abas
+- rolar a pagina fora da tabela
+- rolar a tabela de registros separadamente
+- testar com 10 registros
+- testar com 50 registros
+- testar com 100 registros
+- editar um registro
+- excluir um registro
+- abrir anexo
+- exportar Excel
+- exportar PDF
 
-### Mes
+## 14. Direcao recomendada para futuras melhorias
 
-1. selecionar `Mes`
-2. escolher ano
-3. escolher mes
-4. tela abre leitura mensal
+Se a tela crescer mais, separar em modulos menores:
 
-### Dia
-
-1. selecionar `Dia`
-2. escolher ano
-3. escolher mes
-4. escolher dia
-5. tela abre leitura diaria
-
-## 9. Pontos sensiveis
-
-- `ui/historico.py` e grande e concentra varias responsabilidades
-- alteracoes pequenas de layout podem afetar muitos grids
-- `Canvas` exige cuidado manual com coordenadas e espacamento
-- a aba `Registros` precisa equilibrar legibilidade da tabela com o painel lateral
-
-## 10. Recomendacoes para futuras refatoracoes
-
-Se a aba crescer mais, o ideal e separar em:
-
-- `HistorySelectionView`
+- `HistorySelectionPanel`
 - `HistorySummaryPanel`
+- `HistoryFlowsPanel`
 - `HistoryAnalysisPanel`
 - `HistoryChartPanel`
 - `HistoryRecordsPanel`
 - `MovementEditorDialog`
 
-Isso reduziria o tamanho de `ui/historico.py` e facilitaria manutencao por bloco.
+Isso reduziria a complexidade de `ui/historico.py` e deixaria manutencao mais previsivel.
