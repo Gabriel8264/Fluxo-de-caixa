@@ -17,13 +17,23 @@ from services.cash_service import CashService
 from services.excel import exportar_excel
 from services.pdf import gerar_pdf
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps, bind_treeview_mousewheel
+from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps
 
 
 class HistoryView(ctk.CTkFrame):
     """Histórico financeiro por ano, mês e dia."""
 
     columns = ("data", "tipo", "valor", "categoria", "descricao", "pessoa", "metodo", "anexo")
+    COLUMN_LABELS = {
+        "data": "Data",
+        "tipo": "Tipo",
+        "valor": "Valor",
+        "categoria": "Categoria",
+        "descricao": "DescriÃ§Ã£o",
+        "pessoa": "Pessoa / empresa",
+        "metodo": "MÃ©todo",
+        "anexo": "Anexo",
+    }
 
     MONTH_NAMES = {
         "01": "Janeiro",
@@ -85,7 +95,6 @@ class HistoryView(ctk.CTkFrame):
         self.active_tab_name = "Resumo"
         self._tab_dirty: dict[str, bool] = {
             "Resumo": True,
-            "Entradas e saídas": True,
             "Análise": True,
             "Gráfico": True,
             "Registros": True,
@@ -97,9 +106,7 @@ class HistoryView(ctk.CTkFrame):
         self.record_method_filter = "Todos os métodos"
         self.record_sort_by = "Data"
         self.record_sort_desc = True
-        self.flow_page_size = 30
-        self.flow_entry_limit = self.flow_page_size
-        self.flow_exit_limit = self.flow_page_size
+        self._history_mousewheel_active = False
 
         build_treeview_style(self)
 
@@ -150,11 +157,12 @@ class HistoryView(ctk.CTkFrame):
             return None
         try:
             pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
-            if pointer_widget is not None and hasattr(self, "records_tree") and self._is_widget_in_subtree(pointer_widget, self.records_tree):
-                return None
             steps = _mousewheel_steps(event)
             if steps == 0:
                 return None
+            if pointer_widget is not None and hasattr(self, "records_tree") and self._is_widget_in_subtree(pointer_widget, self.records_tree):
+                self.records_tree.yview_scroll(steps * 3, "units")
+                return "break"
             self.canvas.yview_scroll(steps * 4, "units")
             return "break"
         except tk.TclError:
@@ -162,15 +170,42 @@ class HistoryView(ctk.CTkFrame):
 
     def _bind_history_mousewheel(self, widget) -> None:
         try:
-            if not getattr(widget, "_history_mousewheel_bound", False):
-                widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
-                widget.bind("<Button-4>", self._on_mousewheel, add="+")
-                widget.bind("<Button-5>", self._on_mousewheel, add="+")
-                widget._history_mousewheel_bound = True
+            if not getattr(widget, "_history_mousewheel_scope_bound", False):
+                widget.bind("<Enter>", self._activate_history_mousewheel, add="+")
+                widget.bind("<Leave>", self._schedule_history_mousewheel_release, add="+")
+                widget._history_mousewheel_scope_bound = True
         except Exception:
             return
         for child in widget.winfo_children():
             self._bind_history_mousewheel(child)
+
+    def _activate_history_mousewheel(self, _event=None) -> None:
+        if self._history_mousewheel_active:
+            return
+        self.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.bind_all("<Button-4>", self._on_mousewheel)
+        self.bind_all("<Button-5>", self._on_mousewheel)
+        self._history_mousewheel_active = True
+
+    def _schedule_history_mousewheel_release(self, _event=None) -> None:
+        if not self._history_mousewheel_active:
+            return
+        self.after_idle(self._release_history_mousewheel_if_outside)
+
+    def _release_history_mousewheel_if_outside(self) -> None:
+        if not self.winfo_exists():
+            return
+        try:
+            pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
+        except tk.TclError:
+            pointer_widget = None
+        if pointer_widget is not None and self._is_widget_in_subtree(pointer_widget, self):
+            return
+        if self._history_mousewheel_active:
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
+            self._history_mousewheel_active = False
 
     @staticmethod
     def _is_widget_in_subtree(widget, ancestor) -> bool:
@@ -305,7 +340,7 @@ class HistoryView(ctk.CTkFrame):
 
         self.tab_selector = ctk.CTkSegmentedButton(
             self.detail_screen,
-            values=["Resumo", "Entradas e saídas", "Análise", "Gráfico", "Registros"],
+            values=["Resumo", "Análise", "Gráfico", "Registros"],
             command=self._show_tab,
             height=38,
             fg_color=COLORS["surface_alt"],
@@ -327,11 +362,6 @@ class HistoryView(ctk.CTkFrame):
         self.summary_tab.grid_columnconfigure(0, weight=1)
         self.summary_tab.grid_columnconfigure(1, weight=1)
 
-        self.flows_tab = ctk.CTkFrame(self.tab_container, fg_color=COLORS["bg"])
-        self.flows_tab.grid(row=0, column=0, sticky="ew")
-        self.flows_tab.grid_columnconfigure(0, weight=1)
-        self.flows_tab.grid_columnconfigure(1, weight=1)
-
         self.analysis_tab = ctk.CTkFrame(self.tab_container, fg_color=COLORS["bg"])
         self.analysis_tab.grid(row=0, column=0, sticky="ew")
         self.analysis_tab.grid_columnconfigure(0, weight=1)
@@ -347,7 +377,6 @@ class HistoryView(ctk.CTkFrame):
         self._build_records_tab()
         self.tab_frames = {
             "Resumo": self.summary_tab,
-            "Entradas e saídas": self.flows_tab,
             "Análise": self.analysis_tab,
             "Gráfico": self.chart_tab,
             "Registros": self.records_tab,
@@ -421,7 +450,7 @@ class HistoryView(ctk.CTkFrame):
             ("metodo", "Método", 110),
             ("anexo", "Anexo", 120),
         ):
-            self.records_tree.heading(key, text=label)
+            self.records_tree.heading(key, text=label, command=lambda column=key: self._sort_records_by_column(column))
             self.records_tree.column(key, width=width, anchor="w")
 
         tree_y = ttk.Scrollbar(table_wrap, orient="vertical", command=self.records_tree.yview)
@@ -430,7 +459,6 @@ class HistoryView(ctk.CTkFrame):
         self.records_tree.grid(row=0, column=0, sticky="nsew")
         tree_y.grid(row=0, column=1, sticky="ns")
         tree_x.grid(row=1, column=0, sticky="ew")
-        bind_treeview_mousewheel(self.records_tree, units_per_step=3)
         self.records_tree.bind("<<TreeviewSelect>>", self._handle_record_selection)
         self.records_tree.bind("<Double-1>", lambda _event: self._edit_selected_movement())
 
@@ -665,8 +693,6 @@ class HistoryView(ctk.CTkFrame):
             month=month,
             day=day,
         )
-        self.flow_entry_limit = self.flow_page_size
-        self.flow_exit_limit = self.flow_page_size
         self._mark_tabs_dirty()
         self._show_detail_screen()
         if reset_tab:
@@ -709,11 +735,6 @@ class HistoryView(ctk.CTkFrame):
                 self._render_summary_tab(movements, summary)
                 self._tab_dirty["Resumo"] = False
             self._bind_history_mousewheel(self.summary_tab)
-            return
-        if self.active_tab_name == "Entradas e saídas":
-            if self._tab_dirty["Entradas e saídas"]:
-                self._render_flows_tab(movements)
-                self._tab_dirty["Entradas e saídas"] = False
             return
         if self.active_tab_name == "Análise":
             if self._tab_dirty["Análise"]:
@@ -827,23 +848,6 @@ class HistoryView(ctk.CTkFrame):
         )
         self._bind_history_mousewheel(self.summary_tab)
 
-    def _render_flows_tab(self, movements: list[Movement]) -> None:
-        self._clear_container(self.flows_tab)
-
-        entradas = self._movements_by_type(movements, MovementType.ENTRADA)
-        saidas = self._movements_by_type(movements, MovementType.SAIDA)
-
-        entries_box = SectionFrame(self.flows_tab, title=f"Entradas · {self._currency(self._sum_values(entradas))}")
-        entries_box.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        entries_box.grid_columnconfigure(0, weight=1)
-        self._render_flow_cards(entries_box, entradas, COLORS["success"], limit=self.flow_entry_limit, more_command=self._load_more_entries)
-
-        exits_box = SectionFrame(self.flows_tab, title=f"Saídas · {self._currency(self._sum_values(saidas))}")
-        exits_box.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-        exits_box.grid_columnconfigure(0, weight=1)
-        self._render_flow_cards(exits_box, saidas, COLORS["danger"], limit=self.flow_exit_limit, more_command=self._load_more_exits)
-        self._bind_history_mousewheel(self.flows_tab)
-
     def _render_analysis_tab(self, movements: list[Movement], summary: dict[str, object]) -> None:
         self._clear_container(self.analysis_tab)
 
@@ -954,6 +958,7 @@ class HistoryView(ctk.CTkFrame):
         self.sort_by_menu.set(self.record_sort_by)
         self.type_menu.set(self.record_type_filter)
         self._refresh_sort_button_text()
+        self._refresh_record_headings()
 
         self._apply_record_filters()
         self._bind_history_mousewheel(self.records_tab)
@@ -982,6 +987,7 @@ class HistoryView(ctk.CTkFrame):
         field = self.SORT_FIELDS[self.record_sort_by]
         filtered.sort(key=lambda movement: self._sort_value(movement, field), reverse=self.record_sort_desc)
         self._filtered_movements = filtered
+        self._refresh_record_headings()
         self._render_records()
 
     def _render_records(self) -> None:
@@ -1121,8 +1127,38 @@ class HistoryView(ctk.CTkFrame):
 
     def _refresh_sort_button_text(self) -> None:
         self.sort_direction_button.configure(
-            text="Mais recentes / maiores" if self.record_sort_desc else "Mais antigos / menores"
+            text="Ordem decrescente" if self.record_sort_desc else "Ordem crescente"
         )
+
+    def _sort_records_by_column(self, column_key: str) -> None:
+        label = self._column_label(column_key)
+        if self.record_sort_by == label:
+            self.record_sort_desc = not self.record_sort_desc
+        else:
+            self.record_sort_by = label
+            self.record_sort_desc = False
+        self.sort_by_menu.set(self.record_sort_by)
+        self._refresh_sort_button_text()
+        self._apply_record_filters()
+
+    def _refresh_record_headings(self) -> None:
+        active_field = self.SORT_FIELDS.get(self.record_sort_by, "data")
+        for key in self.columns:
+            label = self._column_label(key)
+            indicator = ""
+            if active_field == key:
+                indicator = " ↓" if self.record_sort_desc else " ↑"
+            self.records_tree.heading(
+                key,
+                text=f"{label}{indicator}",
+                command=lambda column=key: self._sort_records_by_column(column),
+            )
+
+    def _column_label(self, column_key: str) -> str:
+        for label, field in self.SORT_FIELDS.items():
+            if field == column_key:
+                return label
+        return column_key.title()
 
     def _edit_selected_movement(self) -> None:
         movement = self._selected_movement()
@@ -1194,44 +1230,6 @@ class HistoryView(ctk.CTkFrame):
         if not selection:
             return None
         return self._movement_map.get(selection[0])
-
-    def _render_flow_cards(self, master, movements: list[Movement], accent: str, *, limit: int, more_command: Callable[[], None]) -> None:
-        if not movements:
-            self._empty_state(master, 2, "Nenhum registro neste grupo.")
-            return
-
-        visible = movements[:limit]
-        for index, movement in enumerate(visible, start=2):
-            card = ctk.CTkFrame(master, fg_color=COLORS["surface_alt"], corner_radius=16)
-            card.grid(row=index, column=0, sticky="ew", padx=18, pady=(0, 10))
-            card.grid_columnconfigure(0, weight=1)
-            header = ctk.CTkFrame(card, fg_color="transparent")
-            header.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 4))
-            header.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(header, text=movement.categoria, font=FONTS["body_bold"], text_color=COLORS["text"], anchor="w").grid(row=0, column=0, sticky="w")
-            ctk.CTkLabel(header, text=self._signed_currency(movement), font=("Segoe UI Semibold", 16), text_color=accent, anchor="e").grid(row=0, column=1, sticky="e")
-            ctk.CTkLabel(card, text=movement.descricao or "-", font=FONTS["body"], text_color=COLORS["text"], anchor="w", justify="left", wraplength=420).grid(row=1, column=0, sticky="ew", padx=14)
-            ctk.CTkLabel(card, text=f"{movement.pessoa} · {movement.metodo} · {movement.formatted_date}", font=FONTS["small"], text_color=COLORS["muted"], anchor="w", justify="left").grid(row=2, column=0, sticky="ew", padx=14, pady=(4, 14))
-        if len(movements) > limit:
-            ctk.CTkButton(
-                master,
-                text=f"Carregar mais ({len(movements) - limit} restantes)",
-                command=more_command,
-                height=40,
-                fg_color=COLORS["surface_alt"],
-                hover_color="#dfe7f3",
-                text_color=COLORS["text"],
-            ).grid(row=2 + len(visible), column=0, sticky="ew", padx=18, pady=(0, 14))
-
-    def _load_more_entries(self) -> None:
-        self.flow_entry_limit += self.flow_page_size
-        if self.active_tab_name == "Entradas e saídas" and self.current_scope_data:
-            self._render_flows_tab(list(self.current_scope_data["movements"]))
-
-    def _load_more_exits(self) -> None:
-        self.flow_exit_limit += self.flow_page_size
-        if self.active_tab_name == "Entradas e saídas" and self.current_scope_data:
-            self._render_flows_tab(list(self.current_scope_data["movements"]))
 
     def _render_group_bars(self, master, grouped: list[tuple[str, float]], color: str) -> None:
         if not grouped:
@@ -1332,8 +1330,15 @@ class HistoryView(ctk.CTkFrame):
         if field == "valor":
             return movement.valor
         if field == "data":
-            return movement.data
-        return getattr(movement, field, "")
+            try:
+                return datetime.strptime(movement.data, "%Y-%m-%d")
+            except ValueError:
+                return datetime.min
+        if field == "tipo":
+            return movement.movement_type.label.lower()
+        if field == "anexo":
+            return attachment_name(movement.anexo).lower()
+        return str(getattr(movement, field, "") or "").lower()
 
     def _month_display(self, month: str | None) -> str:
         if not month:
@@ -1371,6 +1376,11 @@ class HistoryView(ctk.CTkFrame):
         return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     def destroy(self) -> None:
+        if self._history_mousewheel_active:
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
+            self._history_mousewheel_active = False
         super().destroy()
 
 

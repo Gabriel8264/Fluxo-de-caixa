@@ -92,7 +92,6 @@ Complemento recomendado:
 - testar selecao por `Mes`
 - testar selecao por `Dia`
 - abrir `Resumo`
-- abrir `Entradas e saidas`
 - abrir `Analise`
 - abrir `Grafico`
 - abrir `Registros`

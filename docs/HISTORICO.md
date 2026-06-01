@@ -17,7 +17,6 @@ Permitir leitura financeira por:
 Cada periodo abre uma leitura dedicada com:
 
 - `Resumo`
-- `Entradas e saidas`
 - `Analise`
 - `Grafico`
 - `Registros`
@@ -140,26 +139,7 @@ Objetivo:
 - mostrar saldo
 - apontar principais origens e destinos do dinheiro
 
-## 6. Aba Entradas e saidas
-
-Separa os dois fluxos em colunas independentes.
-
-Cada lado mostra:
-
-- total do grupo
-- lista de cards
-- paginação simples com `Carregar mais`
-
-Metodo principal:
-
-- `_render_flows_tab`
-
-Detalhe importante:
-
-- a tela limita a renderizacao inicial para evitar excesso de widgets
-- hoje o limite base e `flow_page_size = 30`
-
-## 7. Aba Analise
+## 6. Aba Analise
 
 Responsavel pela leitura mais interpretativa do periodo.
 
@@ -176,7 +156,7 @@ Metodo principal:
 
 - `_render_analysis_tab`
 
-## 8. Aba Grafico
+## 7. Aba Grafico
 
 Responsavel pelas leituras visuais do periodo.
 
@@ -197,7 +177,7 @@ Observacao:
 - esta aba deve priorizar estabilidade e leitura objetiva
 - evitar excesso de itens visuais no mesmo bloco
 
-## 9. Aba Registros
+## 8. Aba Registros
 
 Responsavel pela conferencia detalhada dos lancamentos.
 
@@ -225,7 +205,7 @@ Metodos principais:
 - `_render_records`
 - `_render_selected_movement`
 
-## 10. Detalhes do registro
+## 9. Detalhes do registro
 
 Os detalhes do registro nao usam mais varios cards grandes separados.
 
@@ -244,7 +224,7 @@ Regras:
 - se houver anexo, o botao `Abrir anexo` da barra de acoes fica habilitado
 - se nao houver selecao, aparece uma mensagem simples
 
-## 11. Exportacao e edicao
+## 10. Exportacao e edicao
 
 Na aba `Registros`:
 
@@ -260,14 +240,14 @@ Modal de edicao:
 
 Esse modal usa `CTkScrollableFrame` proprio e bind de roda do mouse aplicado por helper.
 
-## 12. Pontos sensiveis
+## 11. Pontos sensiveis
 
 - `ui/historico.py` continua grande
 - a tela mistura selecao, leitura, filtros, tabela, exportacao e modal
 - qualquer alteracao de layout deve ser testada com muito conteudo
 - a rolagem principal do Historico nao deve voltar a usar binds globais
 
-## 13. Checklist recomendado ao mexer no Historico
+## 12. Checklist recomendado ao mexer no Historico
 
 - abrir selecao por `Ano`
 - abrir selecao por `Mes`
@@ -284,13 +264,12 @@ Esse modal usa `CTkScrollableFrame` proprio e bind de roda do mouse aplicado por
 - exportar Excel
 - exportar PDF
 
-## 14. Direcao recomendada para futuras melhorias
+## 13. Direcao recomendada para futuras melhorias
 
 Se a tela crescer mais, separar em modulos menores:
 
 - `HistorySelectionPanel`
 - `HistorySummaryPanel`
-- `HistoryFlowsPanel`
 - `HistoryAnalysisPanel`
 - `HistoryChartPanel`
 - `HistoryRecordsPanel`
