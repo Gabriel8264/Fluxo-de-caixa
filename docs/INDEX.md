@@ -17,6 +17,7 @@ Função:
 
 - explicar a arquitetura geral do projeto
 - descrever camadas, fluxo de inicialização, persistência, serviços e responsabilidades da interface
+- registrar a estrutura atual do fluxo de `serviço técnico` e dos dados persistidos
 
 Quando consultar:
 
@@ -57,6 +58,7 @@ Função:
 - servir como guia rápido de manutenção
 - indicar onde mexer para cada tipo de pedido
 - fornecer checklists de validação e armadilhas conhecidas
+- consolidar cuidados práticos com rolagem, ordenação e compatibilidade retroativa
 
 Quando consultar:
 
@@ -77,7 +79,7 @@ Agentes de IA devem ler antes de:
 Função:
 
 - documentar especificamente a aba `Histórico`
-- explicar seleção de período, abas, estratégia de scroll, registros, detalhes e pontos sensíveis
+- explicar seleção de período, abas, estratégia de scroll, registros, ordenação, detalhes e pontos sensíveis
 
 Quando consultar:
 
@@ -91,6 +93,25 @@ Agentes de IA devem ler antes de:
 - alterar a estratégia de scroll do histórico
 - alterar renderização das abas do histórico
 - alterar tabela, filtros, detalhes ou exportações do histórico
+
+### `docs/SERVICO_TECNICO.md`
+
+Função:
+
+- documentar o fluxo de `servico tecnico`
+- centralizar regras de comissao, multiplos tecnicos, persistencia e compatibilidade
+
+Quando consultar:
+
+- antes de qualquer alteracao em `ui/registro.py`
+- antes de mexer em tecnicos, comissao ou resumo visual do servico
+- antes de alterar como o sistema salva ou exibe divisao de comissao
+
+Agentes de IA devem ler antes de:
+
+- modificar `services/cash_service.py` no fluxo de servico tecnico
+- modificar `ui/registro.py`
+- modificar exportacoes que precisem mostrar tecnicos
 
 ## Ordem recomendada de leitura
 
@@ -143,6 +164,16 @@ Ler:
 - `docs/GABARITO_OPERACIONAL.md`
 - `docs/ARQUITETURA.md` se a alteração tocar serviço ou persistência
 
+### Se for alterar serviço técnico, técnicos ou comissão
+
+Ler:
+
+- `docs/INDEX.md`
+- `docs/SERVICO_TECNICO.md`
+- `docs/ARQUITETURA.md`
+- `docs/GUIA_DE_MANUTENCAO.md`
+- `docs/GABARITO_OPERACIONAL.md`
+
 ### Se for alterar Histórico
 
 Ler:
@@ -161,6 +192,19 @@ Ler:
 - Não criar regressões em funcionalidades existentes.
 - Em caso de conflito entre documentação e código, reportar o conflito antes de implementar.
 
+## Limite de escopo
+
+A documentação deve orientar a tarefa atual, não substituir a solicitação do usuário.
+
+Agentes de IA não devem resolver problemas antigos, pendências anteriores ou melhorias sugeridas na documentação, a menos que a solicitação atual peça isso explicitamente.
+
+Ao ler a documentação, use-a apenas para:
+
+- entender regras
+- evitar regressões
+- localizar arquivos corretos
+- validar compatibilidade
+
 ## Regras importantes repetidas na documentação
 
 Estas regras aparecem de forma recorrente nos documentos existentes e devem ser tratadas como diretrizes fortes do projeto:
@@ -171,12 +215,14 @@ Estas regras aparecem de forma recorrente nos documentos existentes e devem ser 
 - novos campos devem ter fallback seguro
 - entradas e saídas antigas continuam válidas
 - ausência de técnico ou comissão não pode quebrar leitura, exportação, dashboard ou histórico
+- serviços antigos com um técnico continuam válidos
 
 ### 2. O fluxo financeiro não pode ser distorcido
 
 - não duplicar lucro
 - não criar movimentações extras indevidas
 - manter consistência entre UI, serviço, banco, dashboard, exportação e fechamento mensal
+- em `serviço técnico`, o valor da empresa é apenas resumo visual
 
 ### 3. Validar antes de entregar
 
@@ -205,7 +251,14 @@ Estas regras aparecem de forma recorrente nos documentos existentes e devem ser 
 - manter um único scroll principal por tela, exceto tabelas
 - mudanças visuais precisam de validação em uso real
 
-### 7. O Histórico é a área mais sensível do sistema
+### 7. Tabelas administrativas seguem o mesmo padrão de ordenação
+
+- ordenação por clique no cabeçalho
+- ciclo: sem ordenação -> crescente -> decrescente -> sem ordenação
+- o retorno a `sem ordenação` usa a ordem original em memória
+- filtros ativos devem continuar valendo
+
+### 8. O Histórico é a área mais sensível do sistema
 
 - qualquer alteração em `ui/historico.py` exige leitura prévia da documentação específica
 - testar seleção por ano, mês e dia
@@ -237,6 +290,12 @@ Fonte principal:
 Fonte principal:
 
 - `docs/HISTORICO.md`
+
+### Regras específicas de serviço técnico
+
+Fonte principal:
+
+- `docs/SERVICO_TECNICO.md`
 
 ## Conduta esperada de agentes de IA
 

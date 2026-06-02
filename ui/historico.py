@@ -1445,7 +1445,12 @@ class HistoryView(ctk.CTkFrame):
         )
         if not output:
             return
-        exportar_excel(output_path=output, movements=self._export_movements(), title=str(self.current_scope_data["label"]))
+        exportar_excel(
+            output_path=output,
+            movements=self._export_scope_movements(),
+            title=str(self.current_scope_data["label"]),
+            **self._export_metadata("Excel"),
+        )
         messagebox.showinfo("Exportação concluída", "Arquivo Excel gerado com sucesso.")
 
     def _export_pdf_scope(self) -> None:
@@ -1459,15 +1464,34 @@ class HistoryView(ctk.CTkFrame):
         )
         if not output:
             return
-        gerar_pdf(output_path=output, movements=self._export_movements(), title=str(self.current_scope_data["label"]))
+        gerar_pdf(
+            output_path=output,
+            movements=self._export_scope_movements(),
+            title=str(self.current_scope_data["label"]),
+            **self._export_metadata("PDF"),
+        )
         messagebox.showinfo("Exportação concluída", "Arquivo PDF gerado com sucesso.")
 
-    def _export_movements(self) -> list[Movement]:
-        if self._filtered_movements:
-            return list(self._filtered_movements)
+    def _export_scope_movements(self) -> list[Movement]:
         if self.current_scope_data:
             return list(self.current_scope_data["movements"])
         return []
+
+    def _export_metadata(self, file_kind: str) -> dict[str, object]:
+        if not self.current_scope_data:
+            return {}
+        scope = str(self.current_scope_data.get("scope", ""))
+        export_type = {
+            "day": f"Exportação {file_kind} · Visão diária",
+            "month": f"Exportação {file_kind} · Visão mensal",
+            "year": f"Exportação {file_kind} · Visão anual",
+        }.get(scope, f"Exportação {file_kind}")
+        return {
+            "export_type": export_type,
+            "period_label": str(self.current_scope_data.get("label", "")),
+            "generated_at": datetime.now(),
+            "summary": dict(self.current_scope_data.get("summary", {})),
+        }
 
     def _selected_movement(self) -> Movement | None:
         selection = self.records_tree.selection()

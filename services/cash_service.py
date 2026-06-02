@@ -81,7 +81,7 @@ class CashService:
     ) -> tuple[Movement, list[Movement]]:
         """Registra um serviço técnico criando uma entrada e saídas de comissão."""
         technicians = self._load_service_technicians(tecnico_ids)
-        split = self.calculate_technical_service_split(valor_servico, technicians[0].percentual_comissao)
+        split = self.calculate_technical_service_split(valor_servico, technicians)
         service_value = split["valor_servico"]
         movement_date = self._normalize_date(data_movimento) if data_movimento else self.get_active_day()
         cleaned_description = self._require_text(descricao, "A descrição é obrigatória.")
@@ -91,17 +91,19 @@ class CashService:
         if normalized_method not in PAYMENT_METHODS:
             raise ValueError("Método de pagamento inválido.")
 
-        commission_value = split["valor_comissao_tecnico"]
-        company_value = split["valor_empresa"]
+        commission_value = float(split["valor_comissao_total"])
+        company_value = float(split["valor_empresa"])
+        total_percent = float(split["percentual_total_comissao"])
+        technician_shares = list(split["divisao_tecnicos"])
         group_id = uuid4().hex
         technicians_label = ", ".join(technician.nome for technician in technicians)
-        technician_shares = self._split_commission_equally(commission_value, technicians)
         division_payload = json.dumps(
             [
                 {
                     "id": technician.id,
                     "nome": technician.nome,
-                    "percentual_total": technicians[0].percentual_comissao,
+                    "percentual_tecnico": technician.percentual_comissao,
+                    "percentual_total": total_percent,
                     "valor_individual": share,
                 }
                 for technician, share in technician_shares
@@ -122,7 +124,7 @@ class CashService:
             papel_servico="entrada_servico",
             tecnico=technicians_label,
             divisao_tecnicos=division_payload,
-            percentual_comissao_tecnico=technicians[0].percentual_comissao,
+            percentual_comissao_tecnico=total_percent,
             valor_comissao_tecnico=commission_value,
             valor_empresa=company_value,
         )
@@ -143,7 +145,7 @@ class CashService:
                 papel_servico="comissao_tecnica",
                 tecnico=technicians_label,
                 divisao_tecnicos=division_payload,
-                percentual_comissao_tecnico=technicians[0].percentual_comissao,
+                percentual_comissao_tecnico=technician.percentual_comissao,
                 valor_comissao_tecnico=share,
                 valor_empresa=company_value,
             )
@@ -359,18 +361,40 @@ class CashService:
                 return technician
         raise ValueError("Técnico não encontrado.")
 
-    def calculate_technical_service_split(self, valor_servico: str | float, percentual_comissao: str | float) -> dict[str, float]:
-        """Calcula comissão do técnico e valor líquido da empresa."""
+    def calculate_technical_service_split(
+        self,
+        valor_servico: str | float,
+        technicians: list[Technician],
+    ) -> dict[str, object]:
+        """Calcula comissão total, divisão por técnico e valor líquido da empresa."""
         service_value = self._normalize_amount(valor_servico)
-        commission_percent = self._normalize_percentage(percentual_comissao)
-        commission_value = round(service_value * commission_percent / 100, 2)
+        if not technicians:
+            return {
+                "valor_servico": round(service_value, 2),
+                "percentual_total_comissao": 0.0,
+                "percentual_empresa": 100.0,
+                "valor_comissao_total": 0.0,
+                "valor_empresa": round(service_value, 2),
+                "divisao_tecnicos": [],
+            }
+
+        total_percent = round(sum(technician.percentual_comissao for technician in technicians), 2)
+        if total_percent > 100:
+            raise ValueError("A soma das comissões dos técnicos não pode ultrapassar 100%.")
+
+        technician_shares = [
+            (technician, round(service_value * technician.percentual_comissao / 100, 2))
+            for technician in technicians
+        ]
+        commission_value = round(sum(share for _, share in technician_shares), 2)
         company_value = round(service_value - commission_value, 2)
         return {
             "valor_servico": round(service_value, 2),
-            "percentual_tecnico": commission_percent,
-            "percentual_empresa": round(100.0 - commission_percent, 2),
-            "valor_comissao_tecnico": commission_value,
+            "percentual_total_comissao": total_percent,
+            "percentual_empresa": round(100.0 - total_percent, 2),
+            "valor_comissao_total": commission_value,
             "valor_empresa": company_value,
+            "divisao_tecnicos": technician_shares,
         }
 
     def _load_service_technicians(self, technician_ids: list[int]) -> list[Technician]:
@@ -387,23 +411,10 @@ class CashService:
         if any(technician.status != "ativo" for technician in technicians):
             raise ValueError("Selecione apenas técnicos ativos.")
 
-        commission_percent = technicians[0].percentual_comissao
-        for technician in technicians[1:]:
-            if technician.percentual_comissao != commission_percent:
-                raise ValueError("Todos os técnicos do mesmo serviço devem ter a mesma porcentagem de comissão.")
+        total_percent = round(sum(technician.percentual_comissao for technician in technicians), 2)
+        if total_percent > 100:
+            raise ValueError("A soma das comissões dos técnicos não pode ultrapassar 100%.")
         return technicians
-
-    @staticmethod
-    def _split_commission_equally(total_commission: float, technicians: list[Technician]) -> list[tuple[Technician, float]]:
-        """Divide a comissão total igualmente, preservando centavos."""
-        cents = int(round(total_commission * 100))
-        base = cents // len(technicians)
-        remainder = cents % len(technicians)
-        shares: list[tuple[Technician, float]] = []
-        for index, technician in enumerate(technicians):
-            current_cents = base + (1 if index < remainder else 0)
-            shares.append((technician, round(current_cents / 100, 2)))
-        return shares
 
     def add_technician(self, nome: str, percentual_comissao: str | float, status: str) -> Technician:
         """Cadastra técnico com percentual de comissão validado."""

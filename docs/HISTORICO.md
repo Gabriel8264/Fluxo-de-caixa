@@ -138,6 +138,7 @@ Objetivo:
 - mostrar quanto saiu
 - mostrar saldo
 - apontar principais origens e destinos do dinheiro
+- manter foco em leitura consolidada, sem duplicar a aba `Registros`
 
 ## 6. Aba Analise
 
@@ -151,6 +152,7 @@ Exibe indicadores como:
 - participacao por categoria
 - quantidade de entradas
 - quantidade de saidas
+- relacao entre entradas e saidas do periodo
 
 Metodo principal:
 
@@ -167,6 +169,7 @@ Usa:
 - barras com `CTkProgressBar`
 - grupos resumidos por categoria
 - comparacao entre entradas, saidas e saldo
+- evolucao temporal simplificada quando houver dados suficientes
 
 Metodo principal:
 
@@ -195,7 +198,27 @@ Filtros atuais:
 - categoria
 - pessoa
 - metodo
-- ordenacao
+- data
+
+Ordenacao atual:
+
+- feita diretamente pelos cabecalhos da tabela
+- colunas ordenaveis:
+  - `Data`
+  - `Tipo`
+  - `Valor`
+  - `Categoria`
+  - `Descricao`
+  - `Pessoa / empresa`
+  - `Metodo`
+  - `Anexo`
+- ciclo:
+  - sem ordenacao
+  - crescente
+  - decrescente
+  - sem ordenacao
+- a volta para `sem ordenacao` usa a ordem original em memoria
+- filtros ativos devem continuar valendo durante a ordenacao
 
 Metodos principais:
 
@@ -223,6 +246,7 @@ Regras:
 
 - se houver anexo, o botao `Abrir anexo` da barra de acoes fica habilitado
 - se nao houver selecao, aparece uma mensagem simples
+- se o registro continuar existindo apos filtro ou ordenacao, a selecao deve ser preservada quando possivel
 
 ## 10. Exportacao e edicao
 
@@ -240,31 +264,68 @@ Modal de edicao:
 
 Esse modal usa `CTkScrollableFrame` proprio e bind de roda do mouse aplicado por helper.
 
-## 11. Pontos sensiveis
+Compatibilidade importante ao editar:
+
+- editar um registro antigo nao pode contaminar o dia ativo atual
+- o registro deve continuar vinculado a sua data real
+- so deve impactar o painel diario atual se a data for alterada para o dia ativo
+
+## 11. Compatibilidade financeira e legado
+
+O Historico precisa continuar legivel com:
+
+- entradas antigas
+- saidas antigas
+- registros sem tecnico
+- registros sem comissao
+- categoria antiga `Comissao`
+- servicos tecnicos antigos com um unico tecnico
+- servicos tecnicos novos com multiplos tecnicos
+
+Regras financeiras importantes:
+
+- `serviço técnico` gera entrada bruta do servico
+- a comissao entra como saida
+- o valor da empresa nunca vira nova entrada
+- multiplos tecnicos nao podem duplicar lucro
+
+Quando houver varios tecnicos:
+
+- a divisao deve poder ser lida na interface
+- a exportacao nao pode quebrar
+- os registros antigos continuam funcionando sem migracao obrigatoria
+
+## 12. Pontos sensiveis
 
 - `ui/historico.py` continua grande
 - a tela mistura selecao, leitura, filtros, tabela, exportacao e modal
 - qualquer alteracao de layout deve ser testada com muito conteudo
 - a rolagem principal do Historico nao deve voltar a usar binds globais
+- dropdowns customizados de `Ano`, `Mes` e `Dia` exigem teste de alternancia e clique fora
+- a tabela de `Registros` e o scroll principal nao devem brigar entre si
 
-## 12. Checklist recomendado ao mexer no Historico
+## 13. Checklist recomendado ao mexer no Historico
 
 - abrir selecao por `Ano`
 - abrir selecao por `Mes`
 - abrir selecao por `Dia`
+- testar abrir e fechar dropdown com segundo clique
+- testar clique fora para fechar dropdown
 - trocar entre todas as abas
 - rolar a pagina fora da tabela
 - rolar a tabela de registros separadamente
 - testar com 10 registros
 - testar com 50 registros
 - testar com 100 registros
+- testar ordenacao de cabecalhos
+- testar retorno para `sem ordenacao`
 - editar um registro
 - excluir um registro
 - abrir anexo
 - exportar Excel
 - exportar PDF
 
-## 13. Direcao recomendada para futuras melhorias
+## 14. Direcao recomendada para futuras melhorias
 
 Se a tela crescer mais, separar em modulos menores:
 

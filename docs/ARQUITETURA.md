@@ -63,16 +63,25 @@ Tabela principal:
   - `pessoa`
   - `data`
   - `anexo`
+  - `grupo_servico`
+  - `papel_servico`
+  - `tecnico`
+  - `divisao_tecnicos`
+  - `percentual_comissao_tecnico`
+  - `valor_comissao_tecnico`
+  - `valor_empresa`
 
 Tabelas auxiliares:
 
 - `categorias`
 - `pessoas`
+- `tecnicos`
 
 Inicializacao importante:
 
 - cria tabelas se nao existirem
 - garante coluna `anexo`
+- garante colunas do fluxo de `serviço técnico`
 - migra tipos legados como `pagar` e `receber`
 - migra metodos legados como `debito` e `credito`
 - semeia categorias padrao
@@ -103,12 +112,28 @@ Pontos principais:
 - inicializar repositorio e sessao
 - iniciar novo dia
 - criar, editar e excluir movimentacoes
+- registrar `serviço técnico` como fluxo financeiro especializado
 - listar movimentacoes com filtros
 - devolver resumo geral ou do dia ativo
 - devolver arvore do historico por ano/mes/dia
 - devolver pacote analitico do historico para a UI
 - gerenciar categorias
 - gerenciar pessoas/empresas
+- gerenciar tecnicos e comissoes
+
+Regras importantes do `serviço técnico`:
+
+- o valor bruto do servico entra como `entrada`
+- a comissao dos tecnicos sai como `saida`
+- o valor da empresa e apenas resumo visual e nao gera nova movimentacao
+- com multiplos tecnicos, a comissao total e a soma dos percentuais individuais
+- a soma dos percentuais nao pode ultrapassar `100%`
+- servicos antigos com um tecnico continuam validos
+- registros antigos sem tecnico continuam validos
+
+Documento de apoio:
+
+- `docs/SERVICO_TECNICO.md`
 
 O metodo mais importante para telas de historico e:
 
@@ -145,7 +170,7 @@ Responsabilidades:
 - montar a barra superior
 - trocar entre telas
 - atualizar status do dia ativo
-- permitir recolher o topo azul para ganhar espaco
+- manter o topo em modo compacto como padrao
 
 ### 7.2 Painel diario
 
@@ -165,9 +190,12 @@ Arquivo: `ui/registro.py`
 Responsabilidades:
 
 - cadastrar entrada ou saida
+- cadastrar `serviço técnico`
 - escolher categoria, pessoa e metodo
 - anexar arquivo
 - preencher data com mascara
+- calcular resumo de comissao em tempo real
+- suportar um ou varios tecnicos no mesmo servico
 
 ### 7.4 Consultas e filtros
 
@@ -187,6 +215,7 @@ Responsabilidades:
 
 - CRUD de categorias
 - CRUD de pessoas/empresas
+- CRUD de tecnicos/comissoes
 
 ### 7.6 Historico
 
@@ -200,6 +229,7 @@ Responsabilidades:
 - editar e excluir registros
 - exportar o periodo selecionado
 - abrir anexos
+- ordenar registros por clique no cabecalho
 
 ## 8. Componentes reutilizaveis
 
@@ -246,3 +276,4 @@ O projeto foi ajustado para funcionar fora do ambiente de desenvolvimento:
 - O historico e a tela mais sensivel da aplicacao e concentra muita regra de renderizacao.
 - Os textos de interface devem permanecer coerentes com `entrada` e `saida`.
 - Se houver ajustes em anexos, revisar tambem `services/attachments.py`.
+- Em `serviço técnico`, nunca duplicar lucro com uma segunda entrada para o valor da empresa.
