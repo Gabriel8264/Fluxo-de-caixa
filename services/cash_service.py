@@ -6,6 +6,7 @@ historico e cadastros auxiliares e conversa com o repositorio SQLite.
 """
 
 import calendar
+import json
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime
@@ -74,16 +75,13 @@ class CashService:
         categoria: str,
         metodo: str,
         pessoa: str,
-        tecnico_id: int,
+        tecnico_ids: list[int],
         data_movimento: str | None = None,
         anexo: str = "",
-    ) -> tuple[Movement, Movement]:
-        """Registra um serviço técnico criando entrada e saída de comissão."""
-        technician = self.get_technician(tecnico_id)
-        if technician.status != "ativo":
-            raise ValueError("Selecione um técnico ativo.")
-
-        split = self.calculate_technical_service_split(valor_servico, technician.percentual_comissao)
+    ) -> tuple[Movement, list[Movement]]:
+        """Registra um serviço técnico criando uma entrada e saídas de comissão."""
+        technicians = self._load_service_technicians(tecnico_ids)
+        split = self.calculate_technical_service_split(valor_servico, technicians[0].percentual_comissao)
         service_value = split["valor_servico"]
         movement_date = self._normalize_date(data_movimento) if data_movimento else self.get_active_day()
         cleaned_description = self._require_text(descricao, "A descrição é obrigatória.")
@@ -96,6 +94,20 @@ class CashService:
         commission_value = split["valor_comissao_tecnico"]
         company_value = split["valor_empresa"]
         group_id = uuid4().hex
+        technicians_label = ", ".join(technician.nome for technician in technicians)
+        technician_shares = self._split_commission_equally(commission_value, technicians)
+        division_payload = json.dumps(
+            [
+                {
+                    "id": technician.id,
+                    "nome": technician.nome,
+                    "percentual_total": technicians[0].percentual_comissao,
+                    "valor_individual": share,
+                }
+                for technician, share in technician_shares
+            ],
+            ensure_ascii=False,
+        )
 
         entry = Movement(
             tipo=MovementType.ENTRADA.value,
@@ -108,31 +120,36 @@ class CashService:
             anexo=anexo.strip(),
             grupo_servico=group_id,
             papel_servico="entrada_servico",
-            tecnico=technician.nome,
-            percentual_comissao_tecnico=technician.percentual_comissao,
+            tecnico=technicians_label,
+            divisao_tecnicos=division_payload,
+            percentual_comissao_tecnico=technicians[0].percentual_comissao,
             valor_comissao_tecnico=commission_value,
             valor_empresa=company_value,
         )
         entry.id = self.repository.add_movement(entry)
 
-        commission_exit = Movement(
-            tipo=MovementType.SAIDA.value,
-            valor=commission_value,
-            descricao=f"Comissão técnica · {cleaned_description}",
-            categoria="Comissão",
-            metodo=normalized_method,
-            pessoa=technician.nome,
-            data=movement_date,
-            anexo=anexo.strip(),
-            grupo_servico=group_id,
-            papel_servico="comissao_tecnica",
-            tecnico=technician.nome,
-            percentual_comissao_tecnico=technician.percentual_comissao,
-            valor_comissao_tecnico=commission_value,
-            valor_empresa=company_value,
-        )
-        commission_exit.id = self.repository.add_movement(commission_exit)
-        return entry, commission_exit
+        commission_exits: list[Movement] = []
+        for technician, share in technician_shares:
+            commission_exit = Movement(
+                tipo=MovementType.SAIDA.value,
+                valor=share,
+                descricao=f"Comissão técnica · {technician.nome} · {cleaned_description}",
+                categoria="Comissão",
+                metodo=normalized_method,
+                pessoa=technician.nome,
+                data=movement_date,
+                anexo=anexo.strip(),
+                grupo_servico=group_id,
+                papel_servico="comissao_tecnica",
+                tecnico=technicians_label,
+                divisao_tecnicos=division_payload,
+                percentual_comissao_tecnico=technicians[0].percentual_comissao,
+                valor_comissao_tecnico=share,
+                valor_empresa=company_value,
+            )
+            commission_exit.id = self.repository.add_movement(commission_exit)
+            commission_exits.append(commission_exit)
+        return entry, commission_exits
 
     def update_movement(
         self,
@@ -149,6 +166,7 @@ class CashService:
     ) -> Movement:
         """Valida e atualiza uma movimentacao existente."""
         existing = self.repository.get_movement(movement_id)
+        effective_date = data_movimento.strip() if data_movimento and data_movimento.strip() else existing.data
         movement = self._build_movement(
             tipo=tipo,
             valor=valor,
@@ -156,13 +174,14 @@ class CashService:
             categoria=categoria,
             metodo=metodo,
             pessoa=pessoa,
-            data_movimento=data_movimento,
+            data_movimento=effective_date,
             anexo=anexo,
         )
         movement.id = movement_id
         movement.grupo_servico = existing.grupo_servico
         movement.papel_servico = existing.papel_servico
         movement.tecnico = existing.tecnico
+        movement.divisao_tecnicos = existing.divisao_tecnicos
         movement.percentual_comissao_tecnico = existing.percentual_comissao_tecnico
         movement.valor_comissao_tecnico = existing.valor_comissao_tecnico
         movement.valor_empresa = existing.valor_empresa
@@ -353,6 +372,38 @@ class CashService:
             "valor_comissao_tecnico": commission_value,
             "valor_empresa": company_value,
         }
+
+    def _load_service_technicians(self, technician_ids: list[int]) -> list[Technician]:
+        """Valida e carrega os técnicos usados em um serviço técnico."""
+        unique_ids: list[int] = []
+        for technician_id in technician_ids:
+            if technician_id not in unique_ids:
+                unique_ids.append(technician_id)
+
+        if not unique_ids:
+            raise ValueError("Selecione ao menos um técnico ativo.")
+
+        technicians = [self.get_technician(technician_id) for technician_id in unique_ids]
+        if any(technician.status != "ativo" for technician in technicians):
+            raise ValueError("Selecione apenas técnicos ativos.")
+
+        commission_percent = technicians[0].percentual_comissao
+        for technician in technicians[1:]:
+            if technician.percentual_comissao != commission_percent:
+                raise ValueError("Todos os técnicos do mesmo serviço devem ter a mesma porcentagem de comissão.")
+        return technicians
+
+    @staticmethod
+    def _split_commission_equally(total_commission: float, technicians: list[Technician]) -> list[tuple[Technician, float]]:
+        """Divide a comissão total igualmente, preservando centavos."""
+        cents = int(round(total_commission * 100))
+        base = cents // len(technicians)
+        remainder = cents % len(technicians)
+        shares: list[tuple[Technician, float]] = []
+        for index, technician in enumerate(technicians):
+            current_cents = base + (1 if index < remainder else 0)
+            shares.append((technician, round(current_cents / 100, 2)))
+        return shares
 
     def add_technician(self, nome: str, percentual_comissao: str | float, status: str) -> Technician:
         """Cadastra técnico com percentual de comissão validado."""

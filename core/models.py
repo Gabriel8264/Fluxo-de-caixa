@@ -63,6 +63,7 @@ class Movement:
     grupo_servico: str = ""
     papel_servico: str = ""
     tecnico: str = ""
+    divisao_tecnicos: str = ""
     percentual_comissao_tecnico: float = 0.0
     valor_comissao_tecnico: float = 0.0
     valor_empresa: float = 0.0

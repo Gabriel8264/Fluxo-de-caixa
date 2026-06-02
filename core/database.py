@@ -106,6 +106,7 @@ class DatabaseManager:
             "grupo_servico": "TEXT NOT NULL DEFAULT ''",
             "papel_servico": "TEXT NOT NULL DEFAULT ''",
             "tecnico": "TEXT NOT NULL DEFAULT ''",
+            "divisao_tecnicos": "TEXT NOT NULL DEFAULT ''",
             "percentual_comissao_tecnico": "REAL NOT NULL DEFAULT 0",
             "valor_comissao_tecnico": "REAL NOT NULL DEFAULT 0",
             "valor_empresa": "REAL NOT NULL DEFAULT 0",
@@ -135,10 +136,10 @@ class DatabaseManager:
                 """
                 INSERT INTO movimentos (
                     tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
-                    grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                    grupo_servico, papel_servico, tecnico, divisao_tecnicos, percentual_comissao_tecnico,
                     valor_comissao_tecnico, valor_empresa
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     movement.movement_type.storage_value,
@@ -152,6 +153,7 @@ class DatabaseManager:
                     movement.grupo_servico,
                     movement.papel_servico,
                     movement.tecnico,
+                    movement.divisao_tecnicos,
                     movement.percentual_comissao_tecnico,
                     movement.valor_comissao_tecnico,
                     movement.valor_empresa,
@@ -170,7 +172,7 @@ class DatabaseManager:
                 """
                 SELECT
                     id, tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
-                    grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                    grupo_servico, papel_servico, tecnico, divisao_tecnicos, percentual_comissao_tecnico,
                     valor_comissao_tecnico, valor_empresa
                 FROM movimentos
                 WHERE id = ?
@@ -192,7 +194,7 @@ class DatabaseManager:
                 """
                 UPDATE movimentos
                 SET tipo = ?, valor = ?, descricao = ?, categoria = ?, metodo = ?, pessoa = ?, data = ?, anexo = ?,
-                    grupo_servico = ?, papel_servico = ?, tecnico = ?, percentual_comissao_tecnico = ?,
+                    grupo_servico = ?, papel_servico = ?, tecnico = ?, divisao_tecnicos = ?, percentual_comissao_tecnico = ?,
                     valor_comissao_tecnico = ?, valor_empresa = ?
                 WHERE id = ?
                 """,
@@ -208,6 +210,7 @@ class DatabaseManager:
                     movement.grupo_servico,
                     movement.papel_servico,
                     movement.tecnico,
+                    movement.divisao_tecnicos,
                     movement.percentual_comissao_tecnico,
                     movement.valor_comissao_tecnico,
                     movement.valor_empresa,
@@ -274,7 +277,7 @@ class DatabaseManager:
         query = """
             SELECT
                 id, tipo, valor, descricao, categoria, metodo, pessoa, data, anexo,
-                grupo_servico, papel_servico, tecnico, percentual_comissao_tecnico,
+                grupo_servico, papel_servico, tecnico, divisao_tecnicos, percentual_comissao_tecnico,
                 valor_comissao_tecnico, valor_empresa
             FROM movimentos
         """
@@ -472,6 +475,7 @@ class DatabaseManager:
             grupo_servico=str(data.get("grupo_servico") or ""),
             papel_servico=str(data.get("papel_servico") or ""),
             tecnico=str(data.get("tecnico") or ""),
+            divisao_tecnicos=str(data.get("divisao_tecnicos") or ""),
             percentual_comissao_tecnico=float(data.get("percentual_comissao_tecnico") or 0.0),
             valor_comissao_tecnico=float(data.get("valor_comissao_tecnico") or 0.0),
             valor_empresa=float(data.get("valor_empresa") or 0.0),

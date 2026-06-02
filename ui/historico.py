@@ -17,7 +17,209 @@ from services.cash_service import CashService
 from services.excel import exportar_excel
 from services.pdf import gerar_pdf
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps
+from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps, bind_treeview_mousewheel
+
+
+class ToggleDropdown(ctk.CTkFrame):
+    """Dropdown simples com alternancia explicita de abrir/fechar."""
+
+    NORMAL_BORDER = COLORS["border"]
+    HOVER_BORDER = "#b8cae0"
+    OPEN_BORDER = COLORS["primary"]
+    FIELD_BG = COLORS["surface"]
+    FIELD_HOVER = "#f6f9fd"
+
+    def __init__(
+        self,
+        master,
+        *,
+        values: list[str],
+        command: Callable[[str], None],
+        on_toggle: Callable[["ToggleDropdown"], None],
+        on_close: Callable[["ToggleDropdown"], None] | None = None,
+    ) -> None:
+        super().__init__(
+            master,
+            fg_color=self.FIELD_BG,
+            corner_radius=12,
+            border_width=1,
+            border_color=self.NORMAL_BORDER,
+        )
+        self.grid_columnconfigure(0, weight=1)
+
+        self._values = list(values)
+        self._command = command
+        self._on_toggle = on_toggle
+        self._on_close = on_close
+        self._value = self._values[0] if self._values else ""
+        self._popup: ctk.CTkToplevel | None = None
+        self._hovered = False
+
+        self.content = ctk.CTkFrame(self, fg_color="transparent", corner_radius=12)
+        self.content.grid(row=0, column=0, sticky="ew")
+        self.content.grid_columnconfigure(0, weight=1)
+
+        self.value_label = ctk.CTkLabel(
+            self.content,
+            text=self._value,
+            font=FONTS["body"],
+            text_color=COLORS["text"],
+            anchor="w",
+            justify="left",
+        )
+        self.value_label.grid(row=0, column=0, sticky="ew", padx=(14, 10), pady=9)
+
+        self.arrow_label = ctk.CTkLabel(
+            self.content,
+            text="▼",
+            font=FONTS["body_bold"],
+            text_color=COLORS["muted"],
+            width=22,
+            anchor="e",
+            justify="right",
+        )
+        self.arrow_label.grid(row=0, column=1, sticky="e", padx=(0, 14), pady=9)
+
+        for widget in (self, self.content, self.value_label, self.arrow_label):
+            widget.bind("<Button-1>", self._handle_click, add="+")
+            widget.bind("<Enter>", self._on_enter, add="+")
+            widget.bind("<Leave>", self._on_leave, add="+")
+
+        self._refresh_visual_state()
+
+    def configure(self, require_redraw: bool = False, **kwargs):  # type: ignore[override]
+        values = kwargs.pop("values", None)
+        command = kwargs.pop("command", None)
+        if values is not None:
+            self._values = list(values)
+            if self._value not in self._values:
+                self._value = self._values[0] if self._values else ""
+            if self.is_open:
+                self.close()
+        if command is not None:
+            self._command = command
+        super().configure(require_redraw=require_redraw, **kwargs)
+        self._refresh_visual_state()
+
+    def set(self, value: str) -> None:
+        self._value = value
+        self._refresh_visual_state()
+
+    def get(self) -> str:
+        return self._value
+
+    @property
+    def is_open(self) -> bool:
+        return self._popup is not None and self._popup.winfo_exists()
+
+    def toggle(self) -> None:
+        self._on_toggle(self)
+
+    def _handle_click(self, _event=None) -> str:
+        self.toggle()
+        return "break"
+
+    def open(self) -> None:
+        if not self._values:
+            return
+        if self.is_open:
+            return
+
+        popup = ctk.CTkToplevel(self)
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.configure(fg_color=COLORS["surface"])
+        popup.bind("<Escape>", lambda _event: self.close())
+
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height() + 4
+        width = max(self.winfo_width(), 220)
+        popup.geometry(f"{width}x1+{x}+{y}")
+
+        container = ctk.CTkFrame(popup, fg_color=COLORS["surface"], corner_radius=12, border_width=1, border_color="#d8e2ef")
+        container.pack(fill="both", expand=True)
+        container.grid_columnconfigure(0, weight=1)
+
+        for index, value in enumerate(self._values):
+            button = ctk.CTkButton(
+                container,
+                text=value,
+                command=lambda selected=value: self._select_value(selected),
+                height=38,
+                corner_radius=0 if 0 < index < len(self._values) - 1 else 10,
+                fg_color=COLORS["surface"],
+                hover_color=COLORS["surface_alt"],
+                text_color=COLORS["text"],
+                font=FONTS["body"],
+                anchor="w",
+            )
+            button.grid(row=index, column=0, sticky="ew", padx=4, pady=(4 if index == 0 else 0, 4 if index == len(self._values) - 1 else 0))
+
+        popup.update_idletasks()
+        popup.geometry(f"{width}x{container.winfo_reqheight()}+{x}+{y}")
+        self._popup = popup
+        self._refresh_visual_state()
+
+    def close(self) -> None:
+        popup = self._popup
+        self._popup = None
+        if popup is not None and popup.winfo_exists():
+            popup.destroy()
+        self._refresh_visual_state()
+        if self._on_close is not None:
+            self._on_close(self)
+
+    def _select_value(self, value: str) -> None:
+        self._value = value
+        self.close()
+        self._command(value)
+
+    def _button_text(self) -> str:
+        arrow = "▲" if self.is_open else "▼"
+        return f"{self._value}  {arrow}".strip()
+
+    def _refresh_button(self) -> None:
+        self._refresh_visual_state()
+
+    def _on_enter(self, _event=None) -> None:
+        self._hovered = True
+        self._refresh_visual_state()
+
+    def _on_leave(self, _event=None) -> None:
+        pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
+        if self._widget_in_subtree(pointer_widget):
+            return
+        self._hovered = False
+        self._refresh_visual_state()
+
+    def _widget_in_subtree(self, widget) -> bool:
+        current = widget
+        while current is not None:
+            if current is self:
+                return True
+            current = getattr(current, "master", None)
+        return False
+
+    def _refresh_visual_state(self) -> None:
+        if self.is_open:
+            border_color = self.OPEN_BORDER
+            field_color = self.FIELD_BG
+            arrow_color = self.OPEN_BORDER
+            arrow = "▲"
+        elif self._hovered:
+            border_color = self.HOVER_BORDER
+            field_color = self.FIELD_HOVER
+            arrow_color = COLORS["text"]
+            arrow = "▼"
+        else:
+            border_color = self.NORMAL_BORDER
+            field_color = self.FIELD_BG
+            arrow_color = COLORS["muted"]
+            arrow = "▼"
+
+        super().configure(border_color=border_color, fg_color=field_color)
+        self.value_label.configure(text=self._value, text_color=COLORS["text"])
+        self.arrow_label.configure(text=arrow, text_color=arrow_color)
 
 
 class HistoryView(ctk.CTkFrame):
@@ -92,6 +294,7 @@ class HistoryView(ctk.CTkFrame):
         self._movement_map: dict[str, Movement] = {}
         self.selected_movement_id: int | None = None
         self._suspend_events = False
+        self._active_period_dropdown: ToggleDropdown | None = None
         self.active_tab_name = "Resumo"
         self._tab_dirty: dict[str, bool] = {
             "Resumo": True,
@@ -104,9 +307,8 @@ class HistoryView(ctk.CTkFrame):
         self.record_category_filter = "Todas as categorias"
         self.record_person_filter = "Todas as pessoas"
         self.record_method_filter = "Todos os métodos"
-        self.record_sort_by = "Data"
-        self.record_sort_desc = True
-        self._history_mousewheel_active = False
+        self.record_sort_by: str | None = None
+        self.record_sort_desc = False
 
         build_treeview_style(self)
 
@@ -145,6 +347,7 @@ class HistoryView(ctk.CTkFrame):
         self._bind_history_mousewheel(self.canvas)
         self._bind_history_mousewheel(self.viewport)
         self._bind_history_mousewheel(self.body)
+        self.after(0, self._bind_period_dropdown_events)
 
     def _sync_scroll_region(self, _event=None) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -156,56 +359,27 @@ class HistoryView(ctk.CTkFrame):
         if not self.winfo_exists():
             return None
         try:
-            pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
             steps = _mousewheel_steps(event)
             if steps == 0:
                 return None
-            if pointer_widget is not None and hasattr(self, "records_tree") and self._is_widget_in_subtree(pointer_widget, self.records_tree):
-                self.records_tree.yview_scroll(steps * 3, "units")
-                return "break"
             self.canvas.yview_scroll(steps * 4, "units")
             return "break"
         except tk.TclError:
             return None
 
     def _bind_history_mousewheel(self, widget) -> None:
+        if hasattr(self, "records_tree") and (widget is self.records_tree or self._is_widget_in_subtree(widget, self.records_tree)):
+            return
         try:
-            if not getattr(widget, "_history_mousewheel_scope_bound", False):
-                widget.bind("<Enter>", self._activate_history_mousewheel, add="+")
-                widget.bind("<Leave>", self._schedule_history_mousewheel_release, add="+")
-                widget._history_mousewheel_scope_bound = True
+            if not getattr(widget, "_history_mousewheel_bound", False):
+                widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
+                widget.bind("<Button-4>", self._on_mousewheel, add="+")
+                widget.bind("<Button-5>", self._on_mousewheel, add="+")
+                widget._history_mousewheel_bound = True
         except Exception:
             return
         for child in widget.winfo_children():
             self._bind_history_mousewheel(child)
-
-    def _activate_history_mousewheel(self, _event=None) -> None:
-        if self._history_mousewheel_active:
-            return
-        self.bind_all("<MouseWheel>", self._on_mousewheel)
-        self.bind_all("<Button-4>", self._on_mousewheel)
-        self.bind_all("<Button-5>", self._on_mousewheel)
-        self._history_mousewheel_active = True
-
-    def _schedule_history_mousewheel_release(self, _event=None) -> None:
-        if not self._history_mousewheel_active:
-            return
-        self.after_idle(self._release_history_mousewheel_if_outside)
-
-    def _release_history_mousewheel_if_outside(self) -> None:
-        if not self.winfo_exists():
-            return
-        try:
-            pointer_widget = self.winfo_containing(self.winfo_pointerx(), self.winfo_pointery())
-        except tk.TclError:
-            pointer_widget = None
-        if pointer_widget is not None and self._is_widget_in_subtree(pointer_widget, self):
-            return
-        if self._history_mousewheel_active:
-            self.unbind_all("<MouseWheel>")
-            self.unbind_all("<Button-4>")
-            self.unbind_all("<Button-5>")
-            self._history_mousewheel_active = False
 
     @staticmethod
     def _is_widget_in_subtree(widget, ancestor) -> bool:
@@ -406,20 +580,29 @@ class HistoryView(ctk.CTkFrame):
         self.method_menu = self._simple_option_menu(filters, ["Todos os métodos"], lambda value: setattr(self, "record_method_filter", value))
         self.method_menu.grid(row=2, column=5, sticky="ew", padx=(0, 18), pady=(0, 14))
 
-        self.sort_by_menu = self._simple_option_menu(filters, list(self.SORT_FIELDS.keys()), lambda value: setattr(self, "record_sort_by", value))
-        self.sort_by_menu.grid(row=3, column=0, sticky="ew", padx=(18, 10), pady=(0, 14))
-        self.sort_direction_button = ctk.CTkButton(
-            filters,
-            text="Mais recentes / maiores",
+        filter_actions = ctk.CTkFrame(filters, fg_color="transparent")
+        filter_actions.grid(row=3, column=0, columnspan=6, sticky="ew", padx=18, pady=(0, 14))
+        filter_actions.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkButton(
+            filter_actions,
+            text="Aplicar",
+            command=self._apply_record_filters,
             height=40,
-            command=self._toggle_sort_direction,
+            fg_color=COLORS["primary"],
+            hover_color=COLORS["primary_hover"],
+            width=180,
+        ).grid(row=0, column=1, sticky="e", padx=(0, 10))
+        ctk.CTkButton(
+            filter_actions,
+            text="Limpar",
+            command=self._reset_record_filters,
+            height=40,
             fg_color=COLORS["surface_alt"],
             hover_color="#dfe7f3",
             text_color=COLORS["text"],
-        )
-        self.sort_direction_button.grid(row=3, column=1, sticky="ew", padx=(0, 10), pady=(0, 14))
-        ctk.CTkButton(filters, text="Aplicar", command=self._apply_record_filters, height=40, fg_color=COLORS["primary"], hover_color=COLORS["primary_hover"]).grid(row=3, column=4, sticky="ew", padx=(0, 10), pady=(0, 14))
-        ctk.CTkButton(filters, text="Limpar", command=self._reset_record_filters, height=40, fg_color=COLORS["surface_alt"], hover_color="#dfe7f3", text_color=COLORS["text"]).grid(row=3, column=5, sticky="ew", padx=(0, 18), pady=(0, 14))
+            width=180,
+        ).grid(row=0, column=2, sticky="e")
 
         table_card = SectionFrame(self.records_tab, title="Movimentações")
         table_card.grid(row=1, column=0, sticky="ew", pady=(0, 14))
@@ -459,6 +642,7 @@ class HistoryView(ctk.CTkFrame):
         self.records_tree.grid(row=0, column=0, sticky="nsew")
         tree_y.grid(row=0, column=1, sticky="ns")
         tree_x.grid(row=1, column=0, sticky="ew")
+        bind_treeview_mousewheel(self.records_tree, units_per_step=3)
         self.records_tree.bind("<<TreeviewSelect>>", self._handle_record_selection)
         self.records_tree.bind("<Double-1>", lambda _event: self._edit_selected_movement())
 
@@ -490,9 +674,15 @@ class HistoryView(ctk.CTkFrame):
         ctk.CTkLabel(box, text=title, font=FONTS["small"], text_color=COLORS["muted"], anchor="w").grid(row=0, column=0, sticky="w", padx=18, pady=(14, 8))
         return box
 
-    def _period_menu(self, master, row: int, column: int, title: str, *, padx: tuple[int, int] = (0, 10)) -> tuple[ctk.CTkFrame, ctk.CTkOptionMenu]:
+    def _period_menu(self, master, row: int, column: int, title: str, *, padx: tuple[int, int] = (0, 10)) -> tuple[ctk.CTkFrame, ToggleDropdown]:
         box = self._selector_box(master, row, column, title, padx=padx)
-        menu = self._simple_option_menu(box, ["Selecione"], lambda _value: None)
+        menu = ToggleDropdown(
+            box,
+            values=["Selecione"],
+            command=lambda _value: None,
+            on_toggle=self._toggle_period_dropdown,
+            on_close=self._on_period_dropdown_closed,
+        )
         menu.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 16))
         return box, menu
 
@@ -514,6 +704,68 @@ class HistoryView(ctk.CTkFrame):
             anchor="w",
             dynamic_resizing=False,
         )
+
+    def _bind_period_dropdown_events(self) -> None:
+        try:
+            self.winfo_toplevel().bind("<Button-1>", self._handle_period_dropdown_click, add="+")
+        except tk.TclError:
+            return
+
+    def _toggle_period_dropdown(self, dropdown: ToggleDropdown) -> None:
+        if self._active_period_dropdown is dropdown and dropdown.is_open:
+            dropdown.close()
+            self._active_period_dropdown = None
+            return
+
+        if self._active_period_dropdown is not None and self._active_period_dropdown is not dropdown:
+            self._active_period_dropdown.close()
+
+        dropdown.open()
+        self._active_period_dropdown = dropdown if dropdown.is_open else None
+
+    def _on_period_dropdown_closed(self, dropdown: ToggleDropdown) -> None:
+        if self._active_period_dropdown is dropdown:
+            self._active_period_dropdown = None
+
+    def _handle_period_dropdown_click(self, event) -> None:
+        dropdown = self._active_period_dropdown
+        if dropdown is None or not dropdown.is_open:
+            return
+
+        x_root = getattr(event, "x_root", None)
+        y_root = getattr(event, "y_root", None)
+        if x_root is None or y_root is None:
+            return
+
+        if self._point_inside_widget(dropdown, x_root, y_root) or self._point_inside_widget(dropdown._popup, x_root, y_root):
+            return
+
+        dropdown.close()
+        self._active_period_dropdown = None
+
+    @staticmethod
+    def _widget_in_subtree(widget, ancestor) -> bool:
+        current = widget
+        while current is not None:
+            if current is ancestor:
+                return True
+            current = getattr(current, "master", None)
+        return False
+
+    @staticmethod
+    def _point_inside_widget(widget, x_root: int, y_root: int) -> bool:
+        if widget is None:
+            return False
+        try:
+            if not widget.winfo_exists():
+                return False
+            left = widget.winfo_rootx()
+            top = widget.winfo_rooty()
+            right = left + widget.winfo_width()
+            bottom = top + widget.winfo_height()
+        except tk.TclError:
+            return False
+        return left <= x_root <= right and top <= y_root <= bottom
 
     def _ensure_valid_selection(self) -> None:
         years = list(self.history_tree.keys())
@@ -548,6 +800,9 @@ class HistoryView(ctk.CTkFrame):
             self.selected_day = None
 
     def _refresh_selectors(self) -> None:
+        if self._active_period_dropdown is not None:
+            self._active_period_dropdown.close()
+            self._active_period_dropdown = None
         self._suspend_events = True
         self.scope_selector.set({"year": "Ano", "month": "Mês", "day": "Dia"}[self.active_scope])
 
@@ -685,6 +940,9 @@ class HistoryView(ctk.CTkFrame):
     def _open_scope(self, *, reset_tab: bool) -> None:
         if not self._scope_ready():
             return
+        if self._active_period_dropdown is not None:
+            self._active_period_dropdown.close()
+            self._active_period_dropdown = None
 
         month = self.selected_month if self.active_scope in {"month", "day"} else None
         day = self.selected_day if self.active_scope == "day" else None
@@ -953,11 +1211,7 @@ class HistoryView(ctk.CTkFrame):
             self.record_method_filter = methods[0]
         self.method_menu.set(self.record_method_filter)
 
-        if self.record_sort_by not in self.SORT_FIELDS:
-            self.record_sort_by = "Data"
-        self.sort_by_menu.set(self.record_sort_by)
         self.type_menu.set(self.record_type_filter)
-        self._refresh_sort_button_text()
         self._refresh_record_headings()
 
         self._apply_record_filters()
@@ -984,8 +1238,9 @@ class HistoryView(ctk.CTkFrame):
                 continue
             filtered.append(movement)
 
-        field = self.SORT_FIELDS[self.record_sort_by]
-        filtered.sort(key=lambda movement: self._sort_value(movement, field), reverse=self.record_sort_desc)
+        if self.record_sort_by is not None:
+            field = self.SORT_FIELDS[self.record_sort_by]
+            filtered.sort(key=lambda movement: self._sort_value(movement, field), reverse=self.record_sort_desc)
         self._filtered_movements = filtered
         self._refresh_record_headings()
         self._render_records()
@@ -1116,33 +1371,22 @@ class HistoryView(ctk.CTkFrame):
         self.record_category_filter = "Todas as categorias"
         self.record_person_filter = "Todas as pessoas"
         self.record_method_filter = "Todos os métodos"
-        self.record_sort_by = "Data"
-        self.record_sort_desc = True
         self._render_records_tab(list(self.current_scope_data["movements"]) if self.current_scope_data else [])
-
-    def _toggle_sort_direction(self) -> None:
-        self.record_sort_desc = not self.record_sort_desc
-        self._refresh_sort_button_text()
-        self._apply_record_filters()
-
-    def _refresh_sort_button_text(self) -> None:
-        self.sort_direction_button.configure(
-            text="Ordem decrescente" if self.record_sort_desc else "Ordem crescente"
-        )
 
     def _sort_records_by_column(self, column_key: str) -> None:
         label = self._column_label(column_key)
-        if self.record_sort_by == label:
-            self.record_sort_desc = not self.record_sort_desc
-        else:
+        if self.record_sort_by != label:
             self.record_sort_by = label
             self.record_sort_desc = False
-        self.sort_by_menu.set(self.record_sort_by)
-        self._refresh_sort_button_text()
+        elif not self.record_sort_desc:
+            self.record_sort_desc = True
+        else:
+            self.record_sort_by = None
+            self.record_sort_desc = False
         self._apply_record_filters()
 
     def _refresh_record_headings(self) -> None:
-        active_field = self.SORT_FIELDS.get(self.record_sort_by, "data")
+        active_field = self.SORT_FIELDS.get(self.record_sort_by) if self.record_sort_by else None
         for key in self.columns:
             label = self._column_label(key)
             indicator = ""
@@ -1376,11 +1620,9 @@ class HistoryView(ctk.CTkFrame):
         return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     def destroy(self) -> None:
-        if self._history_mousewheel_active:
-            self.unbind_all("<MouseWheel>")
-            self.unbind_all("<Button-4>")
-            self.unbind_all("<Button-5>")
-            self._history_mousewheel_active = False
+        if self._active_period_dropdown is not None:
+            self._active_period_dropdown.close()
+            self._active_period_dropdown = None
         super().destroy()
 
 

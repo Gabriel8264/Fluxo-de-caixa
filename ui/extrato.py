@@ -20,12 +20,25 @@ class StatementView(ctk.CTkFrame):
     """View de extrato com filtros multiplos e leitura de anexos."""
 
     columns = ("data", "tipo", "valor", "categoria", "metodo", "pessoa", "descricao")
+    COLUMN_LABELS = {
+        "data": "Data",
+        "tipo": "Tipo",
+        "valor": "Valor",
+        "categoria": "Categoria",
+        "metodo": "Método",
+        "pessoa": "Pessoa / empresa",
+        "descricao": "Descrição",
+    }
 
     def __init__(self, master, service: CashService) -> None:
         """Inicializa filtros, tabela e estado de selecao do extrato."""
         super().__init__(master, fg_color="transparent")
         self.service = service
         self._movement_map: dict[str, object] = {}
+        self._loaded_movements = []
+        self._selected_movement_id: int | None = None
+        self._sort_column: str | None = None
+        self._sort_desc = False
         build_treeview_style(self)
 
         self.grid_columnconfigure(0, weight=1)
@@ -173,7 +186,7 @@ class StatementView(ctk.CTkFrame):
         }
         widths = {"data": 110, "tipo": 100, "valor": 120, "categoria": 220, "metodo": 145, "pessoa": 270, "descricao": 520}
         for key in self.columns:
-            self.tree.heading(key, text=headings[key])
+            self.tree.heading(key, text=self.COLUMN_LABELS[key], command=lambda column=key: self._sort_by_column(column))
             self.tree.column(key, width=widths[key], anchor="w", stretch=True)
 
         y_scroll = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
@@ -209,27 +222,8 @@ class StatementView(ctk.CTkFrame):
             messagebox.showerror("Filtro inválido", str(exc))
             return
 
-        self._movement_map.clear()
-        for row_id in self.tree.get_children():
-            self.tree.delete(row_id)
-        for movement in movements:
-            item_id = self.tree.insert(
-                "",
-                "end",
-                values=(
-                    movement.formatted_date,
-                    movement.display_type.capitalize(),
-                    self._currency(movement.valor),
-                    movement.categoria,
-                    movement.metodo,
-                    movement.pessoa,
-                    movement.descricao,
-                ),
-            )
-            self._movement_map[item_id] = movement
-        self.detail_bar.set_text("Selecione um registro.")
-        self.attachment_label.configure(text="Anexo: sem anexo")
-        self.open_attachment_button.configure(state="disabled")
+        self._loaded_movements = list(movements)
+        self._render_loaded_movements()
         if switch_tab:
             self.tabs.set("Resultados")
 
@@ -237,11 +231,13 @@ class StatementView(ctk.CTkFrame):
         """Atualiza barra de detalhe e estado do botao de anexo."""
         selected = self.tree.selection()
         if not selected:
+            self._selected_movement_id = None
             return
         values = self.tree.item(selected[0], "values")
         detail = " | ".join(str(value) for value in values)
         self.detail_bar.set_text(detail)
         movement = self._movement_map.get(selected[0])
+        self._selected_movement_id = None if movement is None else movement.id
         attachment_value = "" if movement is None else movement.anexo
         self.attachment_label.configure(text=f"Anexo: {attachment_name(attachment_value)}")
         self.open_attachment_button.configure(state="normal" if attachment_value else "disabled")
@@ -258,6 +254,81 @@ class StatementView(ctk.CTkFrame):
             open_attachment(movement.anexo)
         except (ValueError, FileNotFoundError) as exc:
             messagebox.showerror("Anexo indisponível", str(exc))
+
+    def _render_loaded_movements(self) -> None:
+        selected_id = self._selected_movement_id
+        movements = list(self._loaded_movements)
+        if self._sort_column is not None:
+            movements.sort(
+                key=lambda movement: self._sort_value(movement, self._sort_column),
+                reverse=self._sort_desc,
+            )
+
+        self._movement_map.clear()
+        for row_id in self.tree.get_children():
+            self.tree.delete(row_id)
+
+        selected_item = None
+        for movement in movements:
+            item_id = self.tree.insert(
+                "",
+                "end",
+                values=(
+                    movement.formatted_date,
+                    movement.display_type.capitalize(),
+                    self._currency(movement.valor),
+                    movement.categoria,
+                    movement.metodo,
+                    movement.pessoa,
+                    movement.descricao,
+                ),
+            )
+            self._movement_map[item_id] = movement
+            if selected_id is not None and movement.id == selected_id:
+                selected_item = item_id
+
+        self._refresh_headings()
+        if selected_item is not None:
+            self.tree.selection_set(selected_item)
+            self.tree.focus(selected_item)
+            self.tree.see(selected_item)
+            self._update_selected_detail()
+        else:
+            self._selected_movement_id = None
+            self.detail_bar.set_text("Selecione um registro.")
+            self.attachment_label.configure(text="Anexo: sem anexo")
+            self.open_attachment_button.configure(state="disabled")
+
+    def _sort_by_column(self, column: str) -> None:
+        if self._sort_column != column:
+            self._sort_column = column
+            self._sort_desc = False
+        elif not self._sort_desc:
+            self._sort_desc = True
+        else:
+            self._sort_column = None
+            self._sort_desc = False
+        self._render_loaded_movements()
+
+    def _refresh_headings(self) -> None:
+        for column in self.columns:
+            label = self.COLUMN_LABELS[column]
+            if self._sort_column == column:
+                label = f"{label}{' ↓' if self._sort_desc else ' ↑'}"
+            self.tree.heading(column, text=label, command=lambda current=column: self._sort_by_column(current))
+
+    @staticmethod
+    def _sort_value(movement, column: str):
+        if column == "data":
+            try:
+                return tuple(int(part) for part in movement.data.split("-"))
+            except Exception:
+                return (0, 0, 0)
+        if column == "valor":
+            return float(movement.valor)
+        if column == "tipo":
+            return movement.display_type.lower()
+        return str(getattr(movement, column, "") or "").lower()
 
     def apply_active_day_filter(self) -> None:
         """Atalho para consultar apenas o fluxo do dia ativo."""

@@ -31,6 +31,7 @@ def exportar_excel(
                 movement.display_type.capitalize(),
                 _format_currency(movement.valor),
                 movement.categoria,
+                movement.tecnico,
                 movement.metodo,
                 movement.pessoa,
                 movement.descricao,

@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from core.models import MovementType, PAYMENT_METHODS
+from core.models import MovementType, PAYMENT_METHODS, Technician
 from services.attachments import open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
@@ -37,7 +37,8 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.on_saved = on_saved
         self.on_open_registries = on_open_registries
         self.attachment_path = ""
-        self._technician_map: dict[str, object] = {}
+        self._technician_map: dict[str, Technician] = {}
+        self._selected_technicians: list[Technician] = []
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -96,40 +97,70 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.service_panel.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(
             self.service_panel,
-            text="Fluxo financeiro do serviço",
+            text="Servi?o t?cnico",
             font=FONTS["body_bold"],
             text_color=COLORS["text"],
         ).grid(row=0, column=0, columnspan=2, padx=16, pady=(14, 2), sticky="w")
         ctk.CTkLabel(
             self.service_panel,
-            text="Entrada bruta, comissão do técnico e valor líquido da empresa.",
+            text="Selecione um ou mais t?cnicos e confira a divis?o da comiss?o.",
             font=FONTS["small"],
             text_color=COLORS["muted"],
         ).grid(row=1, column=0, columnspan=2, padx=16, pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(self.service_panel, text="Técnico responsável", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
+        ctk.CTkLabel(self.service_panel, text="T?cnicos respons?veis", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
             row=2, column=0, padx=16, pady=(0, 4), sticky="w"
         )
+        picker_row = ctk.CTkFrame(self.service_panel, fg_color="transparent")
+        picker_row.grid(row=3, column=0, padx=16, pady=(0, 10), sticky="ew")
+        picker_row.grid_columnconfigure(0, weight=1)
         self.technician_selector = ctk.CTkComboBox(
-            self.service_panel,
+            picker_row,
             height=40,
             fg_color=COLORS["surface"],
             border_width=0,
-            command=lambda _value: self._update_service_summary(),
         )
-        self.technician_selector.grid(row=3, column=0, padx=16, pady=(0, 14), sticky="ew")
+        self.technician_selector.grid(row=0, column=0, sticky="ew")
+        self.add_technician_button = ctk.CTkButton(
+            picker_row,
+            text="Adicionar",
+            width=120,
+            height=38,
+            command=self._add_selected_technician,
+            fg_color=COLORS["primary"],
+            hover_color=COLORS["primary_hover"],
+        )
+        self.add_technician_button.grid(row=0, column=1, padx=(10, 0))
+
+        self.no_technician_label = ctk.CTkLabel(
+            self.service_panel,
+            text="Cadastre ao menos um t?cnico ativo para lan?ar este servi?o.",
+            font=FONTS["small"],
+            text_color=COLORS["muted"],
+            anchor="w",
+            justify="left",
+        )
+        self.no_technician_label.grid(row=4, column=0, columnspan=2, padx=16, pady=(0, 10), sticky="w")
+
+        self.selected_technicians_frame = ctk.CTkFrame(self.service_panel, fg_color="transparent")
+        self.selected_technicians_frame.grid(row=5, column=0, columnspan=2, padx=16, pady=(0, 12), sticky="ew")
+        self.selected_technicians_frame.grid_columnconfigure(0, weight=1)
 
         summary_frame = ctk.CTkFrame(self.service_panel, fg_color="transparent")
-        summary_frame.grid(row=2, column=1, rowspan=2, padx=(8, 16), pady=(0, 14), sticky="nsew")
+        summary_frame.grid(row=6, column=0, columnspan=2, padx=16, pady=(0, 10), sticky="ew")
         summary_frame.grid_columnconfigure(0, weight=1)
         summary_frame.grid_columnconfigure(1, weight=1)
 
-        self.technician_card = self._build_service_metric(summary_frame, 0, 0, "Comissão do técnico")
+        self.technician_card = self._build_service_metric(summary_frame, 0, 0, "Comiss?o total")
         self.company_card = self._build_service_metric(summary_frame, 0, 1, "Valor da empresa")
         self.technician_value_label = self.technician_card["value"]
         self.technician_percent_label = self.technician_card["secondary"]
         self.company_value_label = self.company_card["value"]
         self.company_percent_label = self.company_card["secondary"]
+
+        self.service_split_frame = ctk.CTkFrame(self.service_panel, fg_color=COLORS["surface"], corner_radius=14)
+        self.service_split_frame.grid(row=7, column=0, columnspan=2, padx=16, pady=(0, 14), sticky="ew")
+        self.service_split_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(section, text="Data", font=FONTS["body_bold"], text_color=COLORS["text"]).grid(
             row=10, column=0, padx=20, sticky="w"
@@ -257,34 +288,131 @@ class RegisterView(ctk.CTkScrollableFrame):
             self.category_selector.grid()
         self._update_service_summary()
 
-    def _selected_technician(self):
-        """Retorna o técnico escolhido no seletor do formulário."""
-        return self._technician_map.get(self.technician_selector.get())
-
-    def _update_service_summary(self) -> None:
-        """Atualiza a prévia de comissão e valor da empresa."""
-        technician = self._selected_technician()
+    def _add_selected_technician(self) -> None:
+        """Adiciona o t?cnico escolhido ? lista do servi?o t?cnico."""
+        technician = self._technician_map.get(self.technician_selector.get())
         if technician is None:
-            self.technician_value_label.configure(text="R$ 0,00")
-            self.company_value_label.configure(text="R$ 0,00")
-            self.technician_percent_label.configure(text="0% técnico")
-            self.company_percent_label.configure(text="100% empresa")
+            return
+        if any(item.id == technician.id for item in self._selected_technicians):
+            return
+        self._selected_technicians.append(technician)
+        self._render_selected_technicians()
+        self._update_service_summary()
+
+    def _remove_selected_technician(self, technician_id: int | None) -> None:
+        """Remove um t?cnico j? selecionado do servi?o t?cnico."""
+        self._selected_technicians = [item for item in self._selected_technicians if item.id != technician_id]
+        self._render_selected_technicians()
+        self._update_service_summary()
+
+    def _selected_technician_ids(self) -> list[int]:
+        """Devolve os identificadores dos t?cnicos selecionados."""
+        return [technician.id for technician in self._selected_technicians if technician.id is not None]
+
+    def _render_selected_technicians(self) -> None:
+        """Mostra t?cnicos selecionados em chips compactos."""
+        for child in self.selected_technicians_frame.winfo_children():
+            child.destroy()
+
+        if not self._selected_technicians:
+            ctk.CTkLabel(
+                self.selected_technicians_frame,
+                text="Nenhum t?cnico selecionado.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+                anchor="w",
+            ).grid(row=0, column=0, sticky="w")
             return
 
-        self.technician_percent_label.configure(text=f"{technician.percentual_comissao:.2f}% técnico")
-        self.company_percent_label.configure(text=f"{technician.percentual_empresa:.2f}% empresa")
+        row = ctk.CTkFrame(self.selected_technicians_frame, fg_color="transparent")
+        row.grid(row=0, column=0, sticky="w")
+        for index, technician in enumerate(self._selected_technicians):
+            chip = ctk.CTkFrame(row, fg_color=COLORS["surface"], corner_radius=14)
+            chip.grid(row=0, column=index, padx=(0, 8), pady=2, sticky="w")
+            ctk.CTkLabel(
+                chip,
+                text=technician.nome,
+                font=FONTS["small"],
+                text_color=COLORS["text"],
+                anchor="w",
+            ).grid(row=0, column=0, padx=(12, 6), pady=8)
+            ctk.CTkButton(
+                chip,
+                text="?",
+                width=28,
+                height=28,
+                corner_radius=12,
+                command=lambda technician_id=technician.id: self._remove_selected_technician(technician_id),
+                fg_color="transparent",
+                hover_color="#e5edf7",
+                text_color=COLORS["muted"],
+            ).grid(row=0, column=1, padx=(0, 8), pady=6)
+
+    def _update_service_summary(self) -> None:
+        """Atualiza a pr?via de comiss?o, divis?o e valor da empresa."""
+        technicians = list(self._selected_technicians)
+        if not technicians:
+            self.technician_value_label.configure(text="R$ 0,00")
+            self.company_value_label.configure(text="R$ 0,00")
+            self.technician_percent_label.configure(text="0% comiss?o")
+            self.company_percent_label.configure(text="100% empresa")
+            self._render_service_split([], 0.0)
+            return
+
+        commission_percent = technicians[0].percentual_comissao
+        self.technician_percent_label.configure(text=f"{commission_percent:.2f}% comiss?o")
+        self.company_percent_label.configure(text=f"{100.0 - commission_percent:.2f}% empresa")
         try:
             split = self.service.calculate_technical_service_split(
                 self.value_entry.get().strip() or "0",
-                technician.percentual_comissao,
+                commission_percent,
             )
+            commission_shares = self.service._split_commission_equally(split["valor_comissao_tecnico"], technicians)
         except ValueError:
             self.technician_value_label.configure(text="R$ 0,00")
             self.company_value_label.configure(text="R$ 0,00")
+            self._render_service_split([], 0.0)
             return
 
         self.technician_value_label.configure(text=self._currency(split["valor_comissao_tecnico"]))
         self.company_value_label.configure(text=self._currency(split["valor_empresa"]))
+        self._render_service_split(commission_shares, split["valor_empresa"])
+
+    def _render_service_split(self, commission_shares: list[tuple[Technician, float]], company_value: float) -> None:
+        """Renderiza a divis?o da comiss?o entre os t?cnicos selecionados."""
+        for child in self.service_split_frame.winfo_children():
+            child.destroy()
+
+        ctk.CTkLabel(
+            self.service_split_frame,
+            text="Divis?o da comiss?o",
+            font=FONTS["body_bold"],
+            text_color=COLORS["text"],
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
+
+        if not commission_shares:
+            ctk.CTkLabel(
+                self.service_split_frame,
+                text="Selecione t?cnicos para ver a divis?o.",
+                font=FONTS["small"],
+                text_color=COLORS["muted"],
+                anchor="w",
+            ).grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+            return
+
+        for index, (technician, share) in enumerate(commission_shares, start=1):
+            line = ctk.CTkFrame(self.service_split_frame, fg_color="transparent")
+            line.grid(row=index, column=0, sticky="ew", padx=12, pady=(0, 4))
+            line.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(line, text=technician.nome, font=FONTS["body"], text_color=COLORS["text"], anchor="w").grid(row=0, column=0, sticky="w")
+            ctk.CTkLabel(line, text=self._currency(share), font=FONTS["body_bold"], text_color=COLORS["success"], anchor="e").grid(row=0, column=1, sticky="e")
+
+        footer = ctk.CTkFrame(self.service_split_frame, fg_color="transparent")
+        footer.grid(row=len(commission_shares) + 1, column=0, sticky="ew", padx=12, pady=(4, 10))
+        footer.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(footer, text="Empresa", font=FONTS["small"], text_color=COLORS["muted"], anchor="w").grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(footer, text=self._currency(company_value), font=FONTS["body_bold"], text_color=COLORS["text"], anchor="e").grid(row=0, column=1, sticky="e")
 
     def _build_entry(self, master, *, row: int, column: int, label: str, placeholder: str) -> ctk.CTkEntry:
         """Cria campo padronizado do formulario."""
@@ -302,27 +430,42 @@ class RegisterView(ctk.CTkScrollableFrame):
         self._apply_default_person()
 
     def refresh(self) -> None:
-        """Recarrega categorias e pessoas disponiveis para selecao."""
+        """Recarrega categorias, pessoas e t?cnicos dispon?veis."""
         self._ensure_default_person()
         categories = [item.nome for item in self.service.list_categories()]
         people = [item.nome for item in self.service.list_people()]
         technicians = self.service.list_technicians(include_inactive=False)
+        previous_ids = {technician.id for technician in self._selected_technicians if technician.id is not None}
         self._technician_map = {item.nome: item for item in technicians}
         current_category = self.category_selector.get()
-        current_technician = self.technician_selector.get()
+        current_picker = self.technician_selector.get()
+
         self.category_selector.configure(values=categories or ["Sem categorias"])
         self.person_selector.configure(values=people or ["Sem cadastros"])
-        self.technician_selector.configure(values=list(self._technician_map) or ["Sem técnicos ativos"])
+        technician_values = list(self._technician_map) or ["Sem t?cnicos ativos"]
+        self.technician_selector.configure(values=technician_values)
+
         if categories:
             preferred_category = current_category if current_category in categories else categories[0]
             self.category_selector.set(preferred_category)
         if people:
             self._apply_default_person()
+
         if self._technician_map:
-            preferred_technician = current_technician if current_technician in self._technician_map else next(iter(self._technician_map))
-            self.technician_selector.set(preferred_technician)
+            preferred_picker = current_picker if current_picker in self._technician_map else next(iter(self._technician_map))
+            self.technician_selector.set(preferred_picker)
+            self._selected_technicians = [
+                technician for technician in technicians if technician.id in previous_ids
+            ]
+            self.no_technician_label.grid_remove()
+            self.add_technician_button.configure(state="normal")
         else:
-            self.technician_selector.set("Sem técnicos ativos")
+            self.technician_selector.set("Sem t?cnicos ativos")
+            self._selected_technicians = []
+            self.no_technician_label.grid()
+            self.add_technician_button.configure(state="disabled")
+
+        self._render_selected_technicians()
         self._handle_operation_change()
 
     def select_attachment(self) -> None:
@@ -348,26 +491,26 @@ class RegisterView(ctk.CTkScrollableFrame):
             messagebox.showerror("Anexo indisponível", str(exc))
 
     def save(self) -> None:
-        """Valida e salva a movimentacao, depois limpa o formulario."""
+        """Valida e salva a movimenta??o, depois limpa o formul?rio."""
         is_service = self.type_selector.get() == self.SERVICE_OPERATION
         if not is_service and self.category_selector.get() == "Sem categorias":
-            messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma categoria antes de lançar movimentações.")
+            messagebox.showerror("Cadastro inv?lido", "Cadastre ao menos uma categoria antes de lan?ar movimenta??es.")
             return
         if self.person_selector.get() == "Sem cadastros":
-            messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma pessoa ou empresa antes de lançar movimentações.")
+            messagebox.showerror("Cadastro inv?lido", "Cadastre ao menos uma pessoa ou empresa antes de lan?ar movimenta??es.")
             return
         try:
             if is_service:
-                technician = self._selected_technician()
-                if technician is None or technician.id is None:
-                    raise ValueError("Selecione um técnico ativo.")
-                movement, commission = self.service.register_technical_service(
+                technician_ids = self._selected_technician_ids()
+                if not technician_ids:
+                    raise ValueError("Selecione ao menos um t?cnico ativo.")
+                movement, commissions = self.service.register_technical_service(
                     valor_servico=self.value_entry.get(),
                     descricao=self.description_entry.get(),
-                    categoria="Serviços",
+                    categoria="Servi?os",
                     metodo=self.method_selector.get(),
                     pessoa=self.person_selector.get(),
-                    tecnico_id=technician.id,
+                    tecnico_ids=technician_ids,
                     data_movimento=self.date_entry.get().strip() or None,
                     anexo=self.attachment_path,
                 )
@@ -382,30 +525,30 @@ class RegisterView(ctk.CTkScrollableFrame):
                     data_movimento=self.date_entry.get().strip() or None,
                     anexo=self.attachment_path,
                 )
-                commission = None
+                commissions = []
         except ValueError as exc:
-            messagebox.showerror("Cadastro inválido", str(exc))
+            messagebox.showerror("Cadastro inv?lido", str(exc))
             return
 
         if movement.valor >= 1000:
-            messagebox.showwarning("Atenção", "Movimentação de valor alto registrada.")
+            messagebox.showwarning("Aten??o", "Movimenta??o de valor alto registrada.")
 
         self._clear_form()
         self.refresh()
-        if commission is None:
-            messagebox.showinfo("Sucesso", "Movimentação registrada com sucesso.")
+        if not commissions:
+            messagebox.showinfo("Sucesso", "Movimenta??o registrada com sucesso.")
             self.on_saved(movement)
         else:
             messagebox.showinfo(
                 "Sucesso",
                 (
-                    "Serviço técnico registrado com sucesso.\n\n"
+                    "Servi?o t?cnico registrado com sucesso.\n\n"
                     f"Entrada: {self._currency(movement.valor)}\n"
-                    f"Comissão do técnico: {self._currency(commission.valor)}\n"
+                    f"Comiss?o total: {self._currency(sum(item.valor for item in commissions))}\n"
                     f"Empresa: {self._currency(movement.valor_empresa)}"
                 ),
             )
-            self.on_saved((movement, commission))
+            self.on_saved((movement, commissions))
 
     def _clear_form(self) -> None:
         """Restaura o formulario ao estado inicial para novo registro."""
@@ -415,7 +558,9 @@ class RegisterView(ctk.CTkScrollableFrame):
         self.method_selector.set(PAYMENT_METHODS[0])
         self.clear_attachment()
         self.type_selector.set(current_operation)
+        self._selected_technicians = []
         self._apply_default_person()
+        self._render_selected_technicians()
         self._handle_operation_change()
 
     def _ensure_default_person(self) -> None:
