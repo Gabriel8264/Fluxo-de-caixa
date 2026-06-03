@@ -122,6 +122,14 @@ Ler:
 - `docs/GABARITO_OPERACIONAL.md`
 - `docs/GUIA_DE_MANUTENCAO.md`
 
+### Compatibilidade com banco, sessao ou arquivos legados
+
+Ler:
+
+- `docs/INDEX.md`
+- `docs/ARQUITETURA.md`
+- `docs/GUIA_DE_MANUTENCAO.md`
+
 ### Layout, navegacao ou widgets reutilizaveis
 
 Ler:
@@ -196,6 +204,8 @@ Ao ler a documentacao, use-a apenas para:
 - entradas e saidas antigas continuam validas
 - ausencia de tecnico ou comissao nao pode quebrar leitura, exportacao, dashboard ou historico
 - servicos antigos com um tecnico continuam validos
+- `caixa.db` antigo deve abrir com migracoes idempotentes e sem perda de dados
+- `session_state.json` antigo, vazio ou invalido nao pode derrubar o app
 
 ### 2. O fluxo financeiro nao pode ser distorcido
 

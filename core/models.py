@@ -107,3 +107,22 @@ class DailyFlowSummary:
     saidas: float
     saldo: float
     quantidade: int
+
+
+@dataclass(slots=True)
+class CompanyCashAdjustment:
+    tipo: str
+    valor: float
+    descricao: str
+    data: str
+    saldo_antes: float
+    saldo_depois: float
+    created_at: str = ""
+    id: int | None = None
+
+    @property
+    def formatted_date(self) -> str:
+        try:
+            return date.fromisoformat(self.data).strftime("%d/%m/%Y")
+        except ValueError:
+            return self.data

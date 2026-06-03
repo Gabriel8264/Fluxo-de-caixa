@@ -12,7 +12,7 @@ from tkinter import messagebox, ttk
 
 import customtkinter as ctk
 
-from core.models import Movement, MovementType
+from core.models import CompanyCashAdjustment, Movement, MovementType
 from services.attachments import attachment_name, open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
@@ -23,6 +23,7 @@ class DashboardView(ctk.CTkScrollableFrame):
     """View principal para acompanhamento do caixa no dia ativo."""
 
     recent_columns = ("data", "tipo", "pessoa", "categoria", "metodo", "valor", "anexo")
+    company_adjustment_columns = ("data", "tipo", "valor", "descricao", "saldo_antes", "saldo_depois")
 
     def __init__(
         self,
@@ -37,6 +38,7 @@ class DashboardView(ctk.CTkScrollableFrame):
         self.on_create = on_create
         self.on_start_day = on_start_day
         self._movement_map: dict[str, Movement] = {}
+        self._company_adjustment_map: dict[str, CompanyCashAdjustment] = {}
         self._analytics_views: dict[str, dict[str, object]] = {}
         build_treeview_style(self)
 
@@ -125,6 +127,7 @@ class DashboardView(ctk.CTkScrollableFrame):
         self.tabs.add("Resumo do dia")
         self.tabs.add("Movimentações")
         self.tabs.add("Análises")
+        self.tabs.add("Caixa da empresa")
 
         self.summary_tab = self.tabs.tab("Resumo do dia")
         self.summary_tab.grid_columnconfigure(0, weight=1)
@@ -138,9 +141,14 @@ class DashboardView(ctk.CTkScrollableFrame):
         self.analytics_tab.grid_columnconfigure(0, weight=1)
         self.analytics_tab.grid_rowconfigure(0, weight=1)
 
+        self.company_cash_tab = self.tabs.tab("Caixa da empresa")
+        self.company_cash_tab.grid_columnconfigure(0, weight=1)
+        self.company_cash_tab.grid_rowconfigure(1, weight=1)
+
         self._build_summary_tab()
         self._build_movements_tab()
         self._build_analytics_tab()
+        self._build_company_cash_tab()
 
     def _build_summary_tab(self) -> None:
         """Monta a aba de resumo executivo do dia."""
@@ -274,6 +282,96 @@ class DashboardView(ctk.CTkScrollableFrame):
             summary_subtitle="Principais saídas do período.",
         )
 
+    def _build_company_cash_tab(self) -> None:
+        """Cria a visão híbrida do caixa da empresa."""
+        self.company_cash_cards = ctk.CTkFrame(self.company_cash_tab, fg_color="transparent")
+        self.company_cash_cards.grid(row=0, column=0, sticky="ew", pady=(12, 18))
+        for column in range(3):
+            self.company_cash_cards.grid_columnconfigure(column, weight=1)
+
+        self.company_cash_section = SectionFrame(
+            self.company_cash_tab,
+            title="Caixa da empresa",
+            subtitle="Saldo real da empresa combinando registros normais com ajustes manuais auditáveis.",
+            subtitle_wraplength=840,
+        )
+        self.company_cash_section.grid(row=1, column=0, sticky="nsew")
+        self.company_cash_section.grid_columnconfigure(0, weight=1)
+        self.company_cash_section.grid_rowconfigure(5, weight=1)
+
+        self.company_cash_detail = DetailMarqueeBar(self.company_cash_section)
+        self.company_cash_detail.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
+        self.company_cash_detail.set_text("Saldo real = saldo pelos registros + ajustes manuais líquidos.")
+
+        actions = ctk.CTkFrame(self.company_cash_section, fg_color="transparent")
+        actions.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+        actions.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(
+            actions,
+            text="Adicionar fundos",
+            command=lambda: self._open_company_cash_dialog("add_funds"),
+            fg_color=COLORS["success"],
+            hover_color=COLORS["success"],
+            width=160,
+            height=40,
+            corner_radius=14,
+        ).grid(row=0, column=1, padx=(12, 12), sticky="e")
+        ctk.CTkButton(
+            actions,
+            text="Retirar fundos",
+            command=lambda: self._open_company_cash_dialog("withdraw_funds"),
+            fg_color=COLORS["danger"],
+            hover_color=COLORS["danger"],
+            width=160,
+            height=40,
+            corner_radius=14,
+        ).grid(row=0, column=2, sticky="e")
+
+        self.company_cash_metrics = ctk.CTkFrame(self.company_cash_section, fg_color="transparent")
+        self.company_cash_metrics.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self.company_cash_metrics.grid_columnconfigure(0, weight=1)
+        self.company_cash_metrics.grid_columnconfigure(1, weight=1)
+
+        history_host = ctk.CTkFrame(self.company_cash_section, fg_color="transparent")
+        history_host.grid(row=5, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        history_host.grid_columnconfigure(0, weight=1)
+        history_host.grid_rowconfigure(0, weight=1)
+
+        self.company_adjustments_tree = ttk.Treeview(
+            history_host,
+            columns=self.company_adjustment_columns,
+            show="headings",
+            style="Cash.Treeview",
+        )
+        headings = {
+            "data": "Data",
+            "tipo": "Tipo",
+            "valor": "Valor",
+            "descricao": "Descrição",
+            "saldo_antes": "Saldo antes",
+            "saldo_depois": "Saldo depois",
+        }
+        widths = {
+            "data": 110,
+            "tipo": 170,
+            "valor": 130,
+            "descricao": 380,
+            "saldo_antes": 140,
+            "saldo_depois": 140,
+        }
+        for key in self.company_adjustment_columns:
+            self.company_adjustments_tree.heading(key, text=headings[key])
+            self.company_adjustments_tree.column(key, width=widths[key], anchor="w", stretch=True)
+
+        y_scroll = ttk.Scrollbar(history_host, orient="vertical", command=self.company_adjustments_tree.yview)
+        x_scroll = ttk.Scrollbar(history_host, orient="horizontal", command=self.company_adjustments_tree.xview)
+        self.company_adjustments_tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+        self.company_adjustments_tree.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        bind_treeview_mousewheel(self.company_adjustments_tree, units_per_step=3)
+        self.company_adjustments_tree.bind("<<TreeviewSelect>>", self._update_company_adjustment_detail)
+
     def _create_analytics_panel(
         self,
         *,
@@ -331,6 +429,9 @@ class DashboardView(ctk.CTkScrollableFrame):
         self._render_recent(movements[:20])
         analytics_data = self._build_analytics_data(movements, summary, methods_summary)
         self._render_analytics_panels(analytics_data)
+        company_cash_overview = self.service.get_company_cash_overview()
+        company_adjustments = self.service.list_company_cash_adjustments()
+        self._render_company_cash(company_cash_overview, company_adjustments)
 
     def _render_cards(self, summary: dict[str, object], outflows: float) -> None:
         """Atualiza os cards numericos principais do topo."""
@@ -430,6 +531,200 @@ class DashboardView(ctk.CTkScrollableFrame):
             open_attachment(movement.anexo)
         except (ValueError, FileNotFoundError) as exc:
             messagebox.showerror("Anexo indisponível", str(exc))
+
+    def _render_company_cash(self, overview: dict[str, object], adjustments: list[CompanyCashAdjustment]) -> None:
+        """Atualiza a visão híbrida do caixa da empresa."""
+        for child in self.company_cash_cards.winfo_children():
+            child.destroy()
+        for child in self.company_cash_metrics.winfo_children():
+            child.destroy()
+        self._company_adjustment_map.clear()
+        for item in self.company_adjustments_tree.get_children():
+            self.company_adjustments_tree.delete(item)
+
+        cards = [
+            ("Saldo real da empresa", self._currency(float(overview["saldo_real"])), COLORS["primary"], "Registros + ajustes manuais"),
+            ("Saldo pelos registros", self._currency(float(overview["saldo_registros"])), COLORS["success"], "Entradas registradas - saídas registradas"),
+            ("Ajustes manuais líquidos", self._currency(float(overview["ajustes_liquidos"])), COLORS["warning"], "Fundos adicionados - fundos retirados"),
+        ]
+        for column, (title, value, accent, subtitle) in enumerate(cards):
+            Card(self.company_cash_cards, title=title, value=value, accent=accent, subtitle=subtitle).grid(
+                row=0,
+                column=column,
+                padx=(0, 12) if column < len(cards) - 1 else 0,
+                sticky="ew",
+            )
+
+        self.company_cash_detail.set_text(
+            f"Receita principal: {overview['categoria_receita']} | "
+            f"Despesa principal: {overview['categoria_despesa']} | "
+            f"Pessoa/empresa mais frequente: {overview['pessoa_frequente']} | "
+            f"Método mais utilizado: {overview['metodo_frequente']}"
+        )
+
+        metric_items = [
+            ("Entradas acumuladas", self._currency(float(overview["entradas"]))),
+            ("Saídas acumuladas", self._currency(float(overview["saidas"]))),
+            ("Movimentações", str(int(overview["quantidade"]))),
+            ("Primeira movimentação", overview["primeira_movimentacao"] or "Sem registros"),
+            ("Última movimentação", overview["ultima_movimentacao"] or "Sem registros"),
+            ("Receita principal", overview["categoria_receita"]),
+            ("Despesa principal", overview["categoria_despesa"]),
+            ("Pessoa/empresa mais frequente", overview["pessoa_frequente"]),
+            ("Método mais utilizado", overview["metodo_frequente"]),
+            ("Total de serviços realizados", str(int(overview["total_servicos"]))),
+            ("Total pago em comissões", self._currency(float(overview["total_comissoes"]))),
+            ("Maior entrada", overview["maior_entrada"]),
+            ("Maior saída", overview["maior_saida"]),
+            ("Fundos adicionados", self._currency(float(overview["ajustes_adicionados"]))),
+            ("Fundos retirados", self._currency(float(overview["ajustes_retirados"]))),
+        ]
+        for index, (title, text) in enumerate(metric_items):
+            self._company_cash_block(self.company_cash_metrics, index // 2, index % 2, title, text)
+
+        if not adjustments:
+            self.company_adjustments_tree.insert(
+                "",
+                "end",
+                values=("-", "Sem ajustes", "-", "Nenhum ajuste manual registrado.", "-", "-"),
+            )
+            return
+
+        for adjustment in adjustments:
+            item_id = self.company_adjustments_tree.insert(
+                "",
+                "end",
+                values=(
+                    adjustment.formatted_date,
+                    "Adição de fundos" if adjustment.tipo == "add_funds" else "Retirada de fundos",
+                    self._currency(adjustment.valor),
+                    adjustment.descricao,
+                    self._currency(adjustment.saldo_antes),
+                    self._currency(adjustment.saldo_depois),
+                ),
+            )
+            self._company_adjustment_map[item_id] = adjustment
+
+        first_item = self.company_adjustments_tree.get_children()
+        if first_item:
+            self.company_adjustments_tree.selection_set(first_item[0])
+            self._update_company_adjustment_detail()
+
+    def _company_cash_block(self, parent, row: int, column: int, title: str, text: str) -> None:
+        """Renderiza um bloco compacto de indicador do caixa da empresa."""
+        card = ctk.CTkFrame(parent, fg_color=COLORS["surface_alt"], corner_radius=16)
+        card.grid(row=row, column=column, sticky="ew", pady=6, padx=6)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text=title, font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=0, column=0, sticky="w", padx=14, pady=(12, 4)
+        )
+        ctk.CTkLabel(
+            card,
+            text=text,
+            font=FONTS["body_bold"],
+            text_color=COLORS["text"],
+            justify="left",
+            anchor="w",
+            wraplength=360,
+        ).grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _update_company_adjustment_detail(self, _event=None) -> None:
+        """Mostra detalhes do ajuste manual selecionado."""
+        selected = self.company_adjustments_tree.selection()
+        if not selected:
+            return
+        adjustment = self._company_adjustment_map.get(selected[0])
+        if adjustment is None:
+            return
+        kind = "Adição de fundos" if adjustment.tipo == "add_funds" else "Retirada de fundos"
+        self.company_cash_detail.set_text(
+            f"{adjustment.formatted_date} | {kind} | {self._currency(adjustment.valor)} | "
+            f"Saldo antes: {self._currency(adjustment.saldo_antes)} | "
+            f"Saldo depois: {self._currency(adjustment.saldo_depois)} | "
+            f"{adjustment.descricao}"
+        )
+
+    def _open_company_cash_dialog(self, kind: str) -> None:
+        """Abre um modal simples para registrar ajuste manual do caixa da empresa."""
+        title = "Adicionar fundos" if kind == "add_funds" else "Retirar fundos"
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("460x360")
+        dialog.resizable(False, False)
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+        dialog.configure(fg_color=COLORS["bg"])
+        dialog.grid_columnconfigure(0, weight=1)
+
+        section = SectionFrame(
+            dialog,
+            title=title,
+            subtitle="Este ajuste afeta apenas o saldo real da empresa e não entra no fluxo diário comum.",
+            subtitle_wraplength=380,
+        )
+        section.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
+        section.grid_columnconfigure(0, weight=1)
+
+        value_var = tk.StringVar()
+        date_var = tk.StringVar(value=self._display_day(date.today().isoformat()))
+
+        ctk.CTkLabel(section, text="Valor", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=2, column=0, sticky="w", padx=16, pady=(0, 6)
+        )
+        value_entry = ctk.CTkEntry(section, textvariable=value_var, height=40)
+        value_entry.grid(row=3, column=0, sticky="ew", padx=16)
+
+        ctk.CTkLabel(section, text="Descrição", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=4, column=0, sticky="w", padx=16, pady=(12, 6)
+        )
+        description_entry = ctk.CTkEntry(section, height=40, placeholder_text="Descrição obrigatória do ajuste")
+        description_entry.grid(row=5, column=0, sticky="ew", padx=16)
+
+        ctk.CTkLabel(section, text="Data", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=6, column=0, sticky="w", padx=16, pady=(12, 6)
+        )
+        date_entry = ctk.CTkEntry(section, textvariable=date_var, height=40)
+        date_entry.grid(row=7, column=0, sticky="ew", padx=16)
+
+        actions = ctk.CTkFrame(section, fg_color="transparent")
+        actions.grid(row=8, column=0, sticky="ew", padx=16, pady=(16, 16))
+        actions.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(actions, text="Cancelar", command=dialog.destroy, width=120, height=38).grid(
+            row=0, column=1, padx=(0, 12), sticky="e"
+        )
+
+        def submit() -> None:
+            try:
+                if kind == "add_funds":
+                    self.service.add_company_funds(
+                        valor=value_var.get(),
+                        descricao=description_entry.get(),
+                        data_movimento=date_entry.get(),
+                    )
+                else:
+                    self.service.withdraw_company_funds(
+                        valor=value_var.get(),
+                        descricao=description_entry.get(),
+                        data_movimento=date_entry.get(),
+                    )
+            except ValueError as exc:
+                messagebox.showerror("Caixa da empresa", str(exc), parent=dialog)
+                return
+            dialog.destroy()
+            self.refresh()
+            messagebox.showinfo("Caixa da empresa", f"{title} registrado com sucesso.")
+
+        ctk.CTkButton(
+            actions,
+            text="Salvar ajuste",
+            command=submit,
+            fg_color=COLORS["primary"],
+            hover_color=COLORS["primary_hover"],
+            width=140,
+            height=38,
+        ).grid(row=0, column=2, sticky="e")
+
+        value_entry.focus_set()
 
     def _build_analytics_data(
         self,

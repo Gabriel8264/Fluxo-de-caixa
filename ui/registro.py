@@ -371,7 +371,7 @@ class RegisterView(ctk.CTkScrollableFrame):
         except ValueError as exc:
             self.technician_value_label.configure(text="R$ 0,00")
             self.company_value_label.configure(text="R$ 0,00")
-            self.technician_percent_label.configure(text="0,00% comissÃ£o")
+            self.technician_percent_label.configure(text="0,00% comissão")
             self.company_percent_label.configure(text="0,00% empresa")
             self._render_service_split([], 0.0, message=str(exc))
             return
@@ -474,7 +474,7 @@ class RegisterView(ctk.CTkScrollableFrame):
         self._apply_default_person()
 
     def refresh(self) -> None:
-        """Recarrega categorias, pessoas e tÃ©cnicos dispon?veis."""
+        """Recarrega categorias, pessoas e técnicos disponíveis."""
         self._ensure_default_person()
         categories = [item.nome for item in self.service.list_categories()]
         people = [item.nome for item in self.service.list_people()]
@@ -486,7 +486,7 @@ class RegisterView(ctk.CTkScrollableFrame):
 
         self.category_selector.configure(values=categories or ["Sem categorias"])
         self.person_selector.configure(values=people or ["Sem cadastros"])
-        technician_values = list(self._technician_map) or ["Sem tÃ©cnicos ativos"]
+        technician_values = list(self._technician_map) or ["Sem técnicos ativos"]
         self.technician_selector.configure(values=technician_values)
 
         if categories:
@@ -595,7 +595,7 @@ class RegisterView(ctk.CTkScrollableFrame):
             self.on_saved((movement, commissions))
 
     def _clear_form(self) -> None:
-        """Restaura o formulÃ¡rio ao estado inicial para novo registro."""
+        """Restaura o formulário ao estado inicial para novo registro."""
         current_operation = self.type_selector.get()
         for entry in [self.value_entry, self.description_entry, self.date_entry]:
             entry.delete(0, "end")

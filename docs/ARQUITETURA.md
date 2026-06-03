@@ -81,10 +81,12 @@ Inicializacao importante:
 - cria tabelas se nao existirem
 - garante coluna `anexo`
 - garante colunas do fluxo de `servico tecnico`
+- completa tabelas parciais de `tecnicos` e `company_cash_adjustments`
 - migra tipos legados
 - migra metodos legados
 - semeia categorias padrao
 - sincroniza categorias e pessoas ja usadas em movimentos
+- roda de forma idempotente em bancos antigos sem apagar dados
 
 ## 4. Modelos centrais
 
@@ -146,6 +148,14 @@ Arquivo:
 Responsabilidade:
 
 - manter o dia ativo em `session_state.json`
+
+Compatibilidade atual:
+
+- recria estado padrao se o arquivo nao existir
+- recria estado padrao se o arquivo estiver vazio ou com JSON invalido
+- normaliza formatos antigos de data para `YYYY-MM-DD`
+- preserva campos extras validos quando possivel
+- nunca deve derrubar o app por erro de sessao
 
 ## 7. Interface por tela
 
@@ -318,5 +328,6 @@ O projeto foi ajustado para funcionar fora do ambiente de desenvolvimento:
 - a interface usa bastante `customtkinter`; mudancas grandes de layout exigem validacao visual
 - o Historico e a tela mais sensivel do sistema
 - textos de interface devem permanecer legiveis em portugues
+- arquivos antigos `caixa.db` e `session_state.json` precisam continuar abrindo sem migracao destrutiva
 - ajustes em anexos devem revisar `services/attachments.py`
 - em `servico tecnico`, nunca duplicar lucro com uma segunda entrada para o valor da empresa

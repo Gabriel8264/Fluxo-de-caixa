@@ -13,7 +13,7 @@ from datetime import date, datetime
 from uuid import uuid4
 
 from core.database import DatabaseManager
-from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, PAYMENT_METHODS, RegistryItem, Technician
+from core.models import CompanyCashAdjustment, CycleSummary, DailyFlowSummary, Movement, MovementType, PAYMENT_METHODS, RegistryItem, Technician
 from services.session_service import SessionService
 
 
@@ -245,6 +245,111 @@ class CashService:
     def get_daily_flow_details(self, day: str) -> list[Movement]:
         """Lista movimentos detalhados de um dia especifico."""
         return self.repository.fetch_movements_by_day(day)
+
+    def get_company_cash_overview(self) -> dict[str, object]:
+        """Consolida a visão geral da empresa com base nas movimentações existentes."""
+        movements = self.list_movements()
+        summary = self.get_summary(active_day_only=False)
+        adjustments = self.list_company_cash_adjustments()
+        adjustment_additions = round(sum(item.valor for item in adjustments if item.tipo == "add_funds"), 2)
+        adjustment_withdrawals = round(sum(item.valor for item in adjustments if item.tipo == "withdraw_funds"), 2)
+        adjustment_balance = round(adjustment_additions - adjustment_withdrawals, 2)
+        if not movements:
+            return {
+                "entradas": 0.0,
+                "saidas": 0.0,
+                "saldo_registros": 0.0,
+                "ajustes_adicionados": adjustment_additions,
+                "ajustes_retirados": adjustment_withdrawals,
+                "ajustes_liquidos": adjustment_balance,
+                "saldo_real": adjustment_balance,
+                "quantidade": 0,
+                "primeira_movimentacao": "",
+                "ultima_movimentacao": "",
+                "categoria_receita": "Sem dados",
+                "categoria_despesa": "Sem dados",
+                "pessoa_frequente": "Sem dados",
+                "metodo_frequente": "Sem dados",
+                "total_servicos": 0,
+                "total_comissoes": 0.0,
+                "maior_entrada": "Sem dados",
+                "maior_saida": "Sem dados",
+                "adjustments": adjustments,
+            }
+
+        entradas = [movement for movement in movements if movement.movement_type is MovementType.ENTRADA]
+        saidas = [movement for movement in movements if movement.movement_type is MovementType.SAIDA]
+        ordered = sorted(movements, key=lambda item: (item.data, item.id or 0))
+        categoria_receita = self._top_group(entradas, "categoria")
+        categoria_despesa = self._top_group(saidas, "categoria")
+        pessoa_frequente = self._top_frequency(movements, "pessoa")
+        metodo_frequente = self._top_frequency(movements, "metodo")
+        total_servicos = self._count_services(entradas)
+        total_comissoes = round(
+            sum(
+                movement.valor
+                for movement in saidas
+                if movement.papel_servico == "comissao_tecnica"
+                or "comiss" in movement.categoria.casefold()
+            ),
+            2,
+        )
+
+        return {
+            "entradas": float(summary["entradas"]),
+            "saidas": float(summary.get("saidas", summary.get("saídas", 0.0))),
+            "saldo_registros": float(summary["saldo"]),
+            "ajustes_adicionados": adjustment_additions,
+            "ajustes_retirados": adjustment_withdrawals,
+            "ajustes_liquidos": adjustment_balance,
+            "saldo_real": round(float(summary["saldo"]) + adjustment_balance, 2),
+            "quantidade": int(summary["quantidade"]),
+            "primeira_movimentacao": ordered[0].formatted_date,
+            "ultima_movimentacao": ordered[-1].formatted_date,
+            "categoria_receita": categoria_receita,
+            "categoria_despesa": categoria_despesa,
+            "pessoa_frequente": pessoa_frequente,
+            "metodo_frequente": metodo_frequente,
+            "total_servicos": total_servicos,
+            "total_comissoes": total_comissoes,
+            "maior_entrada": self._movement_label(max(entradas, key=lambda item: item.valor, default=None)),
+            "maior_saida": self._movement_label(max(saidas, key=lambda item: item.valor, default=None)),
+            "adjustments": adjustments,
+        }
+
+    def add_company_funds(
+        self,
+        *,
+        valor: str | float,
+        descricao: str,
+        data_movimento: str | None = None,
+    ) -> CompanyCashAdjustment:
+        """Adiciona fundos manuais ao caixa da empresa sem virar movimentação comum."""
+        return self._register_company_cash_adjustment(
+            tipo="add_funds",
+            valor=valor,
+            descricao=descricao,
+            data_movimento=data_movimento,
+        )
+
+    def withdraw_company_funds(
+        self,
+        *,
+        valor: str | float,
+        descricao: str,
+        data_movimento: str | None = None,
+    ) -> CompanyCashAdjustment:
+        """Registra retirada manual do caixa da empresa sem contaminar o fluxo comum."""
+        return self._register_company_cash_adjustment(
+            tipo="withdraw_funds",
+            valor=valor,
+            descricao=descricao,
+            data_movimento=data_movimento,
+        )
+
+    def list_company_cash_adjustments(self) -> list[CompanyCashAdjustment]:
+        """Lista o histórico auditável de ajustes manuais do caixa da empresa."""
+        return self.repository.list_company_cash_adjustments()
 
     def get_history_tree(self) -> dict[str, dict[str, list[str]]]:
         """Monta arvore de historico por ano, mes e dia para a UI."""
@@ -480,6 +585,37 @@ class CashService:
             anexo=anexo.strip(),
         )
 
+    def _register_company_cash_adjustment(
+        self,
+        *,
+        tipo: str,
+        valor: str | float,
+        descricao: str,
+        data_movimento: str | None,
+    ) -> CompanyCashAdjustment:
+        """Cria um ajuste manual auditável do caixa da empresa."""
+        normalized_type = tipo.strip().lower()
+        if normalized_type not in {"add_funds", "withdraw_funds"}:
+            raise ValueError("Tipo de ajuste inválido.")
+        amount = round(self._normalize_amount(valor), 2)
+        description = self._require_text(descricao, "A descrição do ajuste é obrigatória.")
+        movement_date = self._normalize_date(data_movimento) if data_movimento else date.today().isoformat()
+
+        overview = self.get_company_cash_overview()
+        balance_before = float(overview["saldo_real"])
+        signed_amount = amount if normalized_type == "add_funds" else -amount
+        balance_after = round(balance_before + signed_amount, 2)
+        adjustment = CompanyCashAdjustment(
+            tipo=normalized_type,
+            valor=amount,
+            descricao=description,
+            data=movement_date,
+            saldo_antes=balance_before,
+            saldo_depois=balance_after,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        return self.repository.add_company_cash_adjustment(adjustment)
+
     def _history_period_bounds(self, *, year: str, month: str | None, day: str | None) -> tuple[str, str]:
         """Calcula intervalo ISO do recorte historico selecionado."""
         if day is not None and month is not None:
@@ -520,6 +656,47 @@ class CashService:
         summary["metodos"] = dict(sorted(summary["metodos"].items(), key=lambda item: item[1], reverse=True))
         summary["pessoas"] = dict(sorted(summary["pessoas"].items(), key=lambda item: item[1], reverse=True))
         return summary
+
+    @staticmethod
+    def _movement_label(movement: Movement | None) -> str:
+        """Gera um rótulo amigável para maior entrada ou maior saída."""
+        if movement is None:
+            return "Sem dados"
+        amount = f"R$ {movement.valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{movement.categoria} · {amount}"
+
+    @staticmethod
+    def _top_group(movements: list[Movement], attribute: str) -> str:
+        """Retorna o agrupador com maior volume financeiro."""
+        if not movements:
+            return "Sem dados"
+        grouped: dict[str, float] = defaultdict(float)
+        for movement in movements:
+            grouped[getattr(movement, attribute)] += movement.valor
+        name, value = max(grouped.items(), key=lambda item: item[1])
+        amount = f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{name} · {amount}"
+
+    @staticmethod
+    def _top_frequency(movements: list[Movement], attribute: str) -> str:
+        """Retorna o valor mais frequente de um campo."""
+        if not movements:
+            return "Sem dados"
+        counts: dict[str, int] = defaultdict(int)
+        for movement in movements:
+            counts[getattr(movement, attribute)] += 1
+        name, qty = max(counts.items(), key=lambda item: item[1])
+        return f"{name} · {qty} registro(s)"
+
+    @staticmethod
+    def _count_services(entries: list[Movement]) -> int:
+        """Conta serviços a partir das entradas técnicas e da categoria de serviços."""
+        service_groups = {movement.grupo_servico for movement in entries if movement.grupo_servico and movement.papel_servico == "entrada_servico"}
+        regular_services = [
+            movement for movement in entries
+            if not movement.grupo_servico and "servi" in movement.categoria.casefold()
+        ]
+        return len(service_groups) + len(regular_services)
 
     def _build_history_timeline(self, *, scope: str, movements: list[Movement]) -> list[dict[str, object]]:
         """Agrupa movimentos em linha do tempo adequada ao recorte atual."""

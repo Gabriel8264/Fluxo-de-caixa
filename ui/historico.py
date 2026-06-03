@@ -231,9 +231,9 @@ class HistoryView(ctk.CTkFrame):
         "tipo": "Tipo",
         "valor": "Valor",
         "categoria": "Categoria",
-        "descricao": "DescriÃ§Ã£o",
+        "descricao": "Descrição",
         "pessoa": "Pessoa / empresa",
-        "metodo": "MÃ©todo",
+        "metodo": "Método",
         "anexo": "Anexo",
     }
 

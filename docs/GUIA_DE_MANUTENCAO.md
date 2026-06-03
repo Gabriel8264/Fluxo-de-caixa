@@ -255,6 +255,28 @@ Revisar:
 - `core/database.py`
 - `core/models.py`
 - `services/cash_service.py`
+- `services/session_service.py` se houver impacto em persistencia local
+
+### "Quero revisar compatibilidade com dados antigos"
+
+Revisar:
+
+- `core/database.py`
+- `services/session_service.py`
+- `database.py` na raiz se houver ponto de entrada legado
+- `core/app_paths.py` se a mudanca envolver localizacao dos arquivos
+
+Validar no minimo:
+
+- banco antigo com tabela `movimentos` basica
+- banco sem coluna `anexo`
+- banco sem tabelas novas
+- banco ja atualizado rodando migracao de novo
+- `session_state.json` inexistente
+- `session_state.json` vazio
+- `session_state.json` invalido
+- `session_state.json` com formato antigo de data
+- `session_state.json` com campos extras
 
 ## 7. Sugestoes para futuras melhorias
 
@@ -263,3 +285,9 @@ Revisar:
 - centralizar textos da interface em modulo proprio
 - adicionar testes automatizados para servicos e filtros
 - documentar a exportacao em arquivo proprio se ela crescer mais
+
+## 8. Observacao pratica sobre acentos
+
+- o terminal pode mostrar UTF-8 de forma estranha em alguns contextos
+- antes de corrigir texto, confirmar se o problema esta no arquivo fonte ou apenas na exibicao do terminal
+- textos renderizados na interface devem permanecer corretos em portugues brasileiro

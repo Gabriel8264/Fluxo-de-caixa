@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 
 from core.app_paths import data_file
-from core.models import CycleSummary, DailyFlowSummary, Movement, MovementType, RegistryItem, Technician
+from core.models import CompanyCashAdjustment, CycleSummary, DailyFlowSummary, Movement, MovementType, RegistryItem, Technician
 
 
 DEFAULT_DB_PATH = data_file("caixa.db")
@@ -76,8 +76,25 @@ class DatabaseManager:
                 )
                 """
             )
+            self._ensure_technicians_table_shape(cur)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS company_cash_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    type TEXT NOT NULL CHECK(type IN ('add_funds', 'withdraw_funds')),
+                    amount REAL NOT NULL CHECK(amount > 0),
+                    description TEXT NOT NULL,
+                    balance_before REAL NOT NULL,
+                    balance_after REAL NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            self._ensure_company_cash_adjustments_shape(cur)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_data ON movimentos (data DESC)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_busca ON movimentos (pessoa, descricao, categoria)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_company_cash_adjustments_date ON company_cash_adjustments (date DESC, id DESC)")
             self._migrate_legacy_types(cur)
             self._ensure_service_columns(cur)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_movimentos_servico ON movimentos (grupo_servico)")
@@ -114,6 +131,33 @@ class DatabaseManager:
         for column_name, definition in additions.items():
             if column_name not in columns:
                 cur.execute(f"ALTER TABLE movimentos ADD COLUMN {column_name} {definition}")
+
+    def _ensure_technicians_table_shape(self, cur: sqlite3.Cursor) -> None:
+        """Completa a tabela de técnicos quando uma base antiga ou intermediária estiver parcial."""
+        columns = {row["name"] for row in cur.execute("PRAGMA table_info(tecnicos)").fetchall()}
+        additions = {
+            "percentual_comissao": "REAL NOT NULL DEFAULT 0",
+            "status": "TEXT NOT NULL DEFAULT 'ativo'",
+        }
+        for column_name, definition in additions.items():
+            if column_name not in columns:
+                cur.execute(f"ALTER TABLE tecnicos ADD COLUMN {column_name} {definition}")
+
+    def _ensure_company_cash_adjustments_shape(self, cur: sqlite3.Cursor) -> None:
+        """Completa a tabela de ajustes manuais sem recriar nem apagar dados existentes."""
+        columns = {row["name"] for row in cur.execute("PRAGMA table_info(company_cash_adjustments)").fetchall()}
+        additions = {
+            "date": "TEXT NOT NULL DEFAULT ''",
+            "type": "TEXT NOT NULL DEFAULT 'add_funds'",
+            "amount": "REAL NOT NULL DEFAULT 0",
+            "description": "TEXT NOT NULL DEFAULT ''",
+            "balance_before": "REAL NOT NULL DEFAULT 0",
+            "balance_after": "REAL NOT NULL DEFAULT 0",
+            "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        }
+        for column_name, definition in additions.items():
+            if column_name not in columns:
+                cur.execute(f"ALTER TABLE company_cash_adjustments ADD COLUMN {column_name} {definition}")
 
     def _seed_categories(self, cur: sqlite3.Cursor) -> None:
         """Insere categorias padrao caso ainda nao existam."""
@@ -314,6 +358,52 @@ class DatabaseManager:
             ).fetchall()
         return [DailyFlowSummary(**dict(row)) for row in rows]
 
+    def add_company_cash_adjustment(self, adjustment: CompanyCashAdjustment) -> CompanyCashAdjustment:
+        """Persiste um ajuste manual auditável do caixa da empresa."""
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                INSERT INTO company_cash_adjustments (
+                    date, type, amount, description, balance_before, balance_after, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    adjustment.data,
+                    adjustment.tipo,
+                    adjustment.valor,
+                    adjustment.descricao,
+                    adjustment.saldo_antes,
+                    adjustment.saldo_depois,
+                    adjustment.created_at,
+                ),
+            )
+            con.commit()
+            adjustment.id = int(cur.lastrowid)
+        return adjustment
+
+    def list_company_cash_adjustments(self) -> list[CompanyCashAdjustment]:
+        """Lista o histórico próprio de ajustes do caixa da empresa."""
+        with closing(self.connect()) as con:
+            rows = con.execute(
+                """
+                SELECT
+                    id,
+                    date,
+                    type,
+                    amount,
+                    description,
+                    balance_before,
+                    balance_after,
+                    created_at
+                FROM company_cash_adjustments
+                ORDER BY date DESC, id DESC
+                """
+            ).fetchall()
+        return [self._row_to_company_cash_adjustment(row) for row in rows]
+
+
     def list_registry_items(self, table_name: str) -> list[RegistryItem]:
         """Lista itens de cadastro auxiliar ordenados alfabeticamente."""
         with closing(self.connect()) as con:
@@ -479,4 +569,19 @@ class DatabaseManager:
             percentual_comissao_tecnico=float(data.get("percentual_comissao_tecnico") or 0.0),
             valor_comissao_tecnico=float(data.get("valor_comissao_tecnico") or 0.0),
             valor_empresa=float(data.get("valor_empresa") or 0.0),
+        )
+
+    @staticmethod
+    def _row_to_company_cash_adjustment(row: sqlite3.Row) -> CompanyCashAdjustment:
+        """Converte linha do histórico de ajustes em modelo tipado."""
+        data = dict(row)
+        return CompanyCashAdjustment(
+            id=data.get("id"),
+            data=str(data.get("date") or ""),
+            tipo=str(data.get("type") or "add_funds"),
+            valor=float(data.get("amount") or 0.0),
+            descricao=str(data.get("description") or ""),
+            saldo_antes=float(data.get("balance_before") or 0.0),
+            saldo_depois=float(data.get("balance_after") or 0.0),
+            created_at=str(data.get("created_at") or ""),
         )
