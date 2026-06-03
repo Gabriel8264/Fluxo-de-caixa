@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-"""Geracao de PDF sem bibliotecas externas.
+"""Exportação PDF executiva e compacta, sem dependências externas."""
 
-O documento e montado por serializacao direta, com foco em clareza visual,
-resumo executivo e tabela legivel mesmo com muitos registros.
-"""
-
+import json
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
-from textwrap import wrap
 
 from core.models import Movement, MovementType
 from services.cash_service import CashService
@@ -19,26 +16,6 @@ PAGE_WIDTH = 842
 PAGE_HEIGHT = 595
 MARGIN = 34
 CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2)
-HEADER_HEIGHT = 42
-BODY_FONT_SIZE = 9
-SMALL_FONT_SIZE = 8
-TITLE_FONT_SIZE = 18
-LINE_HEIGHT = 13
-ROW_PADDING = 4
-FIRST_PAGE_TABLE_TOP = 255
-FOLLOWING_PAGE_TABLE_TOP = 86
-TABLE_HEADER_HEIGHT = 20
-PAGE_BOTTOM = 42
-TABLE_COLUMNS = [
-    ("data", "Data", 62),
-    ("tipo", "Tipo", 52),
-    ("valor", "Valor", 72),
-    ("categoria", "Categoria", 100),
-    ("metodo", "Método", 70),
-    ("pessoa", "Pessoa / empresa", 128),
-    ("descricao", "Descrição", 260),
-    ("anexo", "Anexo", 60),
-]
 
 
 def gerar_pdf(
@@ -51,280 +28,184 @@ def gerar_pdf(
     period_label: str | None = None,
     generated_at: datetime | None = None,
     summary: dict[str, object] | None = None,
+    pdf_variant: str = "executivo",
 ) -> Path:
-    """Gera PDF a partir dos movimentos informados ou consultados no servico."""
+    """Gera um relatório financeiro PDF executivo e compacto."""
+    del pdf_variant
     service = service or CashService()
-    dados = list(movements) if movements is not None else service.list_movements(limit=200)
+    data = list(movements) if movements is not None else service.list_movements(limit=500)
     generated_at = generated_at or datetime.now()
-    summary_data = summary or _summarize(dados)
     period_label = period_label or title
+    summary_data = _summarize(data)
+    analysis = _analyze_movements(data)
 
-    page_streams = _build_page_streams(
-        dados,
-        title=title,
+    page_stream = _executive_page(
         export_type=export_type,
         period_label=period_label,
         generated_at=generated_at,
         summary=summary_data,
+        analysis=analysis,
     )
-    pdf_bytes = _build_pdf_document(page_streams)
-
+    pdf_bytes = _build_pdf_document([page_stream.encode("cp1252", "replace")])
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(pdf_bytes)
     return output
 
 
-def _build_page_streams(
-    movements: list[Movement],
+def _executive_page(
     *,
-    title: str,
     export_type: str,
     period_label: str,
     generated_at: datetime,
     summary: dict[str, object],
-) -> list[bytes]:
-    """Monta os streams de desenho de cada pagina."""
-    rows = [_movement_row(movement) for movement in movements]
-    pages: list[bytes] = []
-    page_rows: list[dict[str, object]] = []
-    page_number = 1
-    available_top = FIRST_PAGE_TABLE_TOP
-    current_y = available_top
+    analysis: dict[str, object],
+) -> str:
+    commands: list[str] = []
+    commands.extend(_header(export_type, period_label, generated_at))
+    commands.extend(_summary_cards(summary, top_y=430))
+    commands.extend(_narrative(summary, analysis, top_y=348))
 
-    for row in rows:
-        row_height = int(row["height"])
-        if current_y - (TABLE_HEADER_HEIGHT + row_height) < PAGE_BOTTOM and page_rows:
-            pages.append(
-                _page_stream(
-                    page_rows,
-                    page_number=page_number,
-                    total_pages=0,
-                    title=title,
-                    export_type=export_type,
-                    period_label=period_label,
-                    generated_at=generated_at,
-                    summary=summary,
-                    include_summary=page_number == 1,
-                )
-            )
-            page_rows = []
-            page_number += 1
-            current_y = FOLLOWING_PAGE_TABLE_TOP
-        page_rows.append(row)
-        current_y -= row_height
+    left_x = MARGIN
+    right_x = MARGIN + (CONTENT_WIDTH / 2) + 8
+    block_width = (CONTENT_WIDTH / 2) - 8
 
-    if not page_rows:
-        page_rows = [_empty_row()]
-
-    pages.append(
-        _page_stream(
-            page_rows,
-            page_number=page_number,
-            total_pages=0,
-            title=title,
-            export_type=export_type,
-            period_label=period_label,
-            generated_at=generated_at,
-            summary=summary,
-            include_summary=page_number == 1,
+    commands.extend(
+        _analysis_block(
+            "Entradas e saídas",
+            [
+                f"Categoria com maior entrada: {_pair_display(analysis['top_entry_category'])}",
+                f"Categoria com maior saída: {_pair_display(analysis['top_exit_category'])}",
+                f"Maior entrada: {_movement_display(analysis['largest_entry'])}",
+                f"Maior saída: {_movement_display(analysis['largest_exit'])}",
+            ],
+            x=left_x,
+            top_y=218,
+            width=block_width,
+            height=102,
         )
     )
+    commands.extend(
+        _analysis_block(
+            "Métodos e pessoas",
+            [
+                f"Método mais utilizado: {_pair_display(analysis['top_method'])}",
+                f"Pessoa / empresa principal: {_pair_display(analysis['top_person'])}",
+                f"Técnicos envolvidos: {analysis['technicians_label']}",
+                f"Movimentações registradas: {summary['quantidade']}",
+            ],
+            x=right_x,
+            top_y=218,
+            width=block_width,
+            height=102,
+        )
+    )
+    commands.extend(
+        _mini_bar_block(
+            "Indicadores visuais",
+            [
+                ("Entradas", float(summary["entradas"]), max(float(summary["entradas"]), float(summary["saidas"]), abs(float(summary["saldo"])), 1.0), (0.12, 0.62, 0.37)),
+                ("Saídas", float(summary["saidas"]), max(float(summary["entradas"]), float(summary["saidas"]), abs(float(summary["saldo"])), 1.0), (0.84, 0.27, 0.38)),
+                ("Saldo", abs(float(summary["saldo"])), max(float(summary["entradas"]), float(summary["saidas"]), abs(float(summary["saldo"])), 1.0), (0.12, 0.43, 0.92)),
+            ],
+            x=MARGIN,
+            top_y=108,
+            width=CONTENT_WIDTH,
+            height=88,
+        )
+    )
+    return "".join(commands)
 
-    total_pages = len(pages)
+
+def _header(export_type: str, period_label: str, generated_at: datetime) -> list[str]:
+    top = PAGE_HEIGHT - MARGIN - 44
     return [
-        _page_stream(
-            page_rows if index == total_pages - 1 else None,
-            page_number=index + 1,
-            total_pages=total_pages,
-            title=title,
-            export_type=export_type,
-            period_label=period_label,
-            generated_at=generated_at,
-            summary=summary,
-            include_summary=index == 0,
-            prebuilt_stream=pages[index],
-        )
-        for index in range(total_pages)
+        _fill_rect(MARGIN, top, CONTENT_WIDTH, 44, 0.07, 0.16, 0.27),
+        _text(SYSTEM_NAME, MARGIN + 14, top + 27, font="F2", size=18, color=(1, 1, 1)),
+        _text("Relatório financeiro PDF", MARGIN + CONTENT_WIDTH - 182, top + 27, font="F2", size=10.5, color=(0.90, 0.94, 0.98)),
+        _text(export_type, MARGIN + 14, top - 14, size=9.5, color=(0.11, 0.16, 0.23)),
+        _text(f"Período: {period_label}", MARGIN + 230, top - 14, size=9.5, color=(0.11, 0.16, 0.23)),
+        _text(f"Gerado em: {generated_at.strftime('%d/%m/%Y %H:%M')}", PAGE_WIDTH - MARGIN - 175, top - 14, size=9.5, color=(0.37, 0.43, 0.52)),
     ]
 
 
-def _page_stream(
-    page_rows: list[dict[str, object]] | None,
-    *,
-    page_number: int,
-    total_pages: int,
-    title: str,
-    export_type: str,
-    period_label: str,
-    generated_at: datetime,
-    summary: dict[str, object],
-    include_summary: bool,
-    prebuilt_stream: bytes | None = None,
-) -> bytes:
-    """Gera o stream de uma pagina."""
-    if prebuilt_stream is not None and total_pages:
-        body = prebuilt_stream.decode("cp1252")
-        footer = _footer_commands(page_number, total_pages)
-        return (body + footer).encode("cp1252", "replace")
-
-    commands: list[str] = []
-    commands.extend(_header_commands(title, export_type, period_label, generated_at))
-    if include_summary:
-        commands.extend(_summary_commands(summary))
-        table_top = FIRST_PAGE_TABLE_TOP
-    else:
-        table_top = FOLLOWING_PAGE_TABLE_TOP
-
-    commands.extend(_table_header_commands(table_top))
-    y_cursor = table_top - TABLE_HEADER_HEIGHT
-    for row in page_rows or []:
-        commands.extend(_table_row_commands(row, y_cursor))
-        y_cursor -= int(row["height"])
-
-    if total_pages:
-        commands.append(_footer_commands(page_number, total_pages))
-    return "".join(commands).encode("cp1252", "replace")
-
-
-def _header_commands(title: str, export_type: str, period_label: str, generated_at: datetime) -> list[str]:
-    """Desenha o cabecalho institucional do documento."""
-    commands = [
-        _fill_rect(MARGIN, PAGE_HEIGHT - MARGIN - HEADER_HEIGHT, CONTENT_WIDTH, HEADER_HEIGHT, 0.07, 0.16, 0.27),
-        _text(SYSTEM_NAME, MARGIN + 12, PAGE_HEIGHT - MARGIN - 16, font="F2", size=TITLE_FONT_SIZE, color=(1, 1, 1)),
-        _text(export_type, MARGIN + 12, PAGE_HEIGHT - MARGIN - 31, font="F1", size=10, color=(0.86, 0.91, 0.97)),
-        _text(f"Período: {period_label}", MARGIN, PAGE_HEIGHT - MARGIN - 58, font="F2", size=10, color=(0.11, 0.16, 0.23)),
-        _text(f"Gerado em: {generated_at.strftime('%d/%m/%Y %H:%M')}", MARGIN + 230, PAGE_HEIGHT - MARGIN - 58, font="F1", size=10, color=(0.31, 0.38, 0.48)),
-    ]
-    return commands
-
-
-def _summary_commands(summary: dict[str, object]) -> list[str]:
-    """Desenha o resumo executivo do documento."""
-    top = PAGE_HEIGHT - MARGIN - 94
-    card_width = (CONTENT_WIDTH - 18) / 4
-    positions = [MARGIN + (index * (card_width + 6)) for index in range(4)]
+def _summary_cards(summary: dict[str, object], *, top_y: int) -> list[str]:
+    width = (CONTENT_WIDTH - 18) / 4
+    positions = [MARGIN + idx * (width + 6) for idx in range(4)]
     cards = [
-        ("Entradas", float(summary.get("entradas", 0.0)), (0.10, 0.62, 0.37), (0.92, 0.97, 0.94)),
-        ("Saídas", float(summary.get("saidas", 0.0)), (0.84, 0.27, 0.38), (0.99, 0.93, 0.94)),
-        ("Saldo líquido", float(summary.get("saldo", 0.0)), (0.12, 0.43, 0.92), (0.93, 0.95, 1.0)),
-        ("Movimentações", int(summary.get("quantidade", 0)), (0.08, 0.14, 0.22), (0.95, 0.97, 0.99)),
+        ("Entradas", float(summary["entradas"]), (0.10, 0.62, 0.37), (0.92, 0.97, 0.94)),
+        ("Saídas", float(summary["saidas"]), (0.84, 0.27, 0.38), (0.99, 0.93, 0.94)),
+        ("Saldo líquido", float(summary["saldo"]), (0.12, 0.43, 0.92), (0.93, 0.95, 1.0)),
+        ("Movimentações", int(summary["quantidade"]), (0.08, 0.14, 0.22), (0.95, 0.97, 0.99)),
     ]
-
     commands: list[str] = []
-    for index, (label, value, color, fill) in enumerate(cards):
-        x = positions[index]
-        commands.append(_fill_rect(x, top - 62, card_width, 52, *fill))
-        commands.append(_stroke_rect(x, top - 62, card_width, 52, 0.84, 0.89, 0.95))
-        commands.append(_text(label, x + 10, top - 20, font="F1", size=9, color=(0.36, 0.43, 0.52)))
-        display = _format_currency(float(value)) if index < 3 else str(value)
-        commands.append(_text(display, x + 10, top - 40, font="F2", size=15, color=color))
+    for idx, (label, value, color, fill) in enumerate(cards):
+        x = positions[idx]
+        commands.append(_fill_rect(x, top_y, width, 54, *fill))
+        commands.append(_stroke_rect(x, top_y, width, 54, 0.84, 0.89, 0.95))
+        commands.append(_text(label, x + 10, top_y + 34, size=9, color=(0.36, 0.43, 0.52)))
+        display = _format_currency(float(value)) if idx < 3 else str(value)
+        commands.append(_text(display, x + 10, top_y + 13, font="F2", size=14.5, color=color))
+    return commands
 
-    narrative = (
-        f"No período selecionado, o caixa fechou com saldo {'positivo' if float(summary.get('saldo', 0.0)) >= 0 else 'negativo'} "
-        f"de {_format_currency(float(summary.get('saldo', 0.0)))}. "
-        f"As entradas somaram {_format_currency(float(summary.get('entradas', 0.0)))} e as saídas "
-        f"{_format_currency(float(summary.get('saidas', 0.0)))}."
+
+def _narrative(summary: dict[str, object], analysis: dict[str, object], *, top_y: int) -> list[str]:
+    saldo = float(summary["saldo"])
+    text = (
+        f"No período analisado foram registradas {summary['quantidade']} movimentações. "
+        f"O caixa encerrou o período com saldo {'positivo' if saldo >= 0 else 'negativo'} de {_format_currency(saldo)}. "
+        f"A principal fonte de receita foi {analysis['top_entry_category'][0]}. "
+        f"O principal destino dos gastos foi {analysis['top_exit_category'][0]}."
     )
-    commands.append(_fill_rect(MARGIN, 286, CONTENT_WIDTH, 34, 0.96, 0.97, 0.99))
-    commands.append(_stroke_rect(MARGIN, 286, CONTENT_WIDTH, 34, 0.84, 0.89, 0.95))
-    commands.append(_text_block(narrative, MARGIN + 12, 307, max_chars=118, size=10, color=(0.12, 0.17, 0.23), leading=13))
-    return commands
-
-
-def _table_header_commands(table_top: int) -> list[str]:
-    """Desenha o cabecalho da tabela de registros."""
-    commands = [_fill_rect(MARGIN, table_top - TABLE_HEADER_HEIGHT, CONTENT_WIDTH, TABLE_HEADER_HEIGHT, 0.12, 0.43, 0.92)]
-    x = MARGIN
-    for _, label, width in TABLE_COLUMNS:
-        commands.append(_text(label, x + 4, table_top - 14, font="F2", size=8, color=(1, 1, 1)))
-        x += width
-    return commands
-
-
-def _table_row_commands(row: dict[str, object], y_top: int) -> list[str]:
-    """Desenha uma linha da tabela com quebra automatica."""
-    row_height = int(row["height"])
-    fill = (0.96, 0.98, 0.99) if row["tipo"] == "Entrada" else (1.0, 0.97, 0.97)
-    value_color = (0.10, 0.62, 0.37) if row["tipo"] == "Entrada" else (0.84, 0.27, 0.38)
-
-    commands = [
-        _fill_rect(MARGIN, y_top - row_height, CONTENT_WIDTH, row_height, *fill),
-        _stroke_rect(MARGIN, y_top - row_height, CONTENT_WIDTH, row_height, 0.87, 0.91, 0.95),
+    return [
+        _fill_rect(MARGIN, top_y, CONTENT_WIDTH, 54, 0.96, 0.97, 0.99),
+        _stroke_rect(MARGIN, top_y, CONTENT_WIDTH, 54, 0.84, 0.89, 0.95),
+        _text_block(text, MARGIN + 12, top_y + 33, max_chars=124, size=10, color=(0.12, 0.17, 0.23), leading=12),
     ]
 
-    x = MARGIN
-    baseline = y_top - 12
-    commands.append(_text(str(row["data"]), x + 4, baseline, size=8.5))
-    x += TABLE_COLUMNS[0][2]
-    commands.append(_text(str(row["tipo"]), x + 4, baseline, size=8.5, color=value_color))
-    x += TABLE_COLUMNS[1][2]
-    commands.append(_text(_format_currency(float(row["valor"])), x + 4, baseline, font="F2", size=8.5, color=value_color))
-    x += TABLE_COLUMNS[2][2]
-    commands.append(_text(str(row["categoria"]), x + 4, baseline, size=8.5))
-    x += TABLE_COLUMNS[3][2]
-    commands.append(_text(str(row["metodo"]), x + 4, baseline, size=8.5))
-    x += TABLE_COLUMNS[4][2]
-    commands.extend(_text_block_lines(list(row["pessoa_lines"]), x + 4, baseline, size=8.5, leading=11))
-    x += TABLE_COLUMNS[5][2]
-    commands.extend(_text_block_lines(list(row["descricao_lines"]), x + 4, baseline, size=8.5, leading=11))
-    x += TABLE_COLUMNS[6][2]
-    commands.extend(_text_block_lines(list(row["anexo_lines"]), x + 4, baseline, size=8.5, leading=11, color=(0.33, 0.39, 0.48)))
 
+def _analysis_block(title: str, lines: list[str], *, x: float, top_y: int, width: float, height: float) -> list[str]:
+    commands = [
+        _fill_rect(x, top_y, width, height, 0.985, 0.988, 0.995),
+        _stroke_rect(x, top_y, width, height, 0.84, 0.89, 0.95),
+        _text(title, x + 12, top_y + height - 20, font="F2", size=11, color=(0.09, 0.14, 0.22)),
+    ]
+    y = top_y + height - 42
+    for line in lines:
+        commands.append(_text(line, x + 12, y, size=8.8, color=(0.12, 0.17, 0.23)))
+        y -= 16
     return commands
 
 
-def _footer_commands(page_number: int, total_pages: int) -> str:
-    """Desenha rodape padrao da pagina."""
-    return _text(f"Página {page_number}/{total_pages}", PAGE_WIDTH - MARGIN - 60, 22, size=8.5, color=(0.38, 0.44, 0.53))
-
-
-def _movement_row(movement: Movement) -> dict[str, object]:
-    """Converte movimento em linha tabular com altura calculada."""
-    pessoa_lines = _wrap_value(movement.pessoa, width=24)
-    descricao_lines = _wrap_value(movement.descricao or "-", width=44)
-    anexo_lines = _wrap_value("Sim" if movement.anexo else "Não", width=8)
-    max_lines = max(1, len(pessoa_lines), len(descricao_lines), len(anexo_lines))
-    row_height = max(22, (max_lines * 11) + ROW_PADDING + 6)
-    return {
-        "data": movement.formatted_date,
-        "tipo": movement.display_type.capitalize(),
-        "valor": movement.valor,
-        "categoria": movement.categoria,
-        "metodo": movement.metodo,
-        "pessoa_lines": pessoa_lines,
-        "descricao_lines": descricao_lines,
-        "anexo_lines": anexo_lines,
-        "height": row_height,
-    }
-
-
-def _empty_row() -> dict[str, object]:
-    """Retorna uma linha vazia amigavel para periodos sem registros."""
-    return {
-        "data": "-",
-        "tipo": "Sem dados",
-        "valor": 0.0,
-        "categoria": "Nenhuma movimentação",
-        "metodo": "-",
-        "pessoa_lines": ["-"],
-        "descricao_lines": ["Nenhuma movimentação encontrada para este período."],
-        "anexo_lines": ["-"],
-        "height": 34,
-    }
-
-
-def _wrap_value(value: str, *, width: int) -> list[str]:
-    """Quebra texto em linhas curtas para a tabela."""
-    text = (value or "-").strip()
-    return wrap(text, width=width) or ["-"]
+def _mini_bar_block(title: str, bars: list[tuple[str, float, float, tuple[float, float, float]]], *, x: float, top_y: int, width: float, height: float) -> list[str]:
+    commands = [
+        _fill_rect(x, top_y, width, height, 0.985, 0.988, 0.995),
+        _stroke_rect(x, top_y, width, height, 0.84, 0.89, 0.95),
+        _text(title, x + 12, top_y + height - 20, font="F2", size=11, color=(0.09, 0.14, 0.22)),
+    ]
+    bar_y = top_y + height - 44
+    label_width = 84
+    # Reserva fixa maior para valores monetários longos, evitando risco de corte
+    # quando o período tiver números mais altos.
+    value_width = 116
+    right_padding = 14
+    bar_left = x + label_width + 8
+    bar_right = x + width - value_width - right_padding
+    usable = max(36, bar_right - bar_left)
+    for label, value, maximum, color in bars:
+        commands.append(_text(label, x + 12, bar_y + 2, size=8.8, color=(0.12, 0.17, 0.23)))
+        commands.append(_text(_format_currency(value), x + width - value_width, bar_y + 2, size=8.8, color=(0.36, 0.43, 0.52)))
+        commands.append(_fill_rect(bar_left, bar_y - 3, usable, 8, 0.88, 0.92, 0.97))
+        ratio = 0.0 if maximum <= 0 else min(1.0, value / maximum)
+        commands.append(_fill_rect(bar_left, bar_y - 3, usable * ratio, 8, *color))
+        bar_y -= 20
+    return commands
 
 
 def _summarize(movements: list[Movement]) -> dict[str, object]:
-    """Resume a exportacao atual sem novo fetch do banco."""
-    entradas = sum(movement.valor for movement in movements if movement.movement_type is MovementType.ENTRADA)
-    saidas = sum(movement.valor for movement in movements if movement.movement_type is MovementType.SAIDA)
-    saldo = sum(movement.signed_value for movement in movements)
+    entradas = sum(m.valor for m in movements if m.movement_type is MovementType.ENTRADA)
+    saidas = sum(m.valor for m in movements if m.movement_type is MovementType.SAIDA)
+    saldo = sum(m.signed_value for m in movements)
     return {
         "entradas": round(entradas, 2),
         "saidas": round(saidas, 2),
@@ -333,8 +214,68 @@ def _summarize(movements: list[Movement]) -> dict[str, object]:
     }
 
 
+def _analyze_movements(movements: list[Movement]) -> dict[str, object]:
+    entry_categories: defaultdict[str, float] = defaultdict(float)
+    exit_categories: defaultdict[str, float] = defaultdict(float)
+    method_totals: defaultdict[str, float] = defaultdict(float)
+    person_totals: defaultdict[str, float] = defaultdict(float)
+    technicians: Counter[str] = Counter()
+    largest_entry: Movement | None = None
+    largest_exit: Movement | None = None
+
+    for movement in movements:
+        category = movement.categoria or "Sem categoria"
+        method = movement.metodo or "Sem método"
+        person = movement.pessoa or "Sem pessoa"
+        method_totals[method] += float(movement.valor)
+        person_totals[person] += abs(float(movement.valor))
+        for technician in _technician_names(movement):
+            technicians[technician] += 1
+        if movement.movement_type is MovementType.ENTRADA:
+            entry_categories[category] += float(movement.valor)
+            if largest_entry is None or movement.valor > largest_entry.valor:
+                largest_entry = movement
+        else:
+            exit_categories[category] += float(movement.valor)
+            if largest_exit is None or movement.valor > largest_exit.valor:
+                largest_exit = movement
+
+    return {
+        "top_entry_category": max(entry_categories.items(), key=lambda item: item[1], default=("Sem dados", 0.0)),
+        "top_exit_category": max(exit_categories.items(), key=lambda item: item[1], default=("Sem dados", 0.0)),
+        "top_method": max(method_totals.items(), key=lambda item: item[1], default=("Sem dados", 0.0)),
+        "top_person": max(person_totals.items(), key=lambda item: item[1], default=("Sem dados", 0.0)),
+        "technicians_label": ", ".join(name for name, _ in technicians.most_common(4)) or "Sem técnicos",
+        "largest_entry": largest_entry,
+        "largest_exit": largest_exit,
+    }
+
+
+def _technician_names(movement: Movement) -> list[str]:
+    payload = (movement.divisao_tecnicos or "").strip()
+    if payload:
+        try:
+            loaded = json.loads(payload)
+        except json.JSONDecodeError:
+            loaded = []
+        names = [str(item.get("nome") or "").strip() for item in loaded or [] if str(item.get("nome") or "").strip()]
+        if names:
+            return names
+    return [name.strip() for name in (movement.tecnico or "").split(",") if name.strip()]
+
+
+def _pair_display(item: tuple[str, float]) -> str:
+    label, value = item
+    return f"{label} · {_format_currency(float(value))}"
+
+
+def _movement_display(movement: Movement | None) -> str:
+    if movement is None:
+        return "Sem dados"
+    return f"{movement.categoria} · {_format_currency(float(movement.valor))} · {movement.formatted_date}"
+
+
 def _build_pdf_document(page_streams: list[bytes]) -> bytes:
-    """Monta os objetos PDF e devolve o arquivo final em bytes."""
     objects: list[bytes] = [b""]
 
     def reserve_object() -> int:
@@ -358,51 +299,42 @@ def _build_pdf_document(page_streams: list[bytes]) -> bytes:
     font_bold_id = add_object(_font_object("Helvetica-Bold"))
 
     page_ids: list[int] = []
-    total_pages = len(page_streams)
-    for page_number, page_stream in enumerate(page_streams, start=1):
-        stream_with_footer = (
-            page_stream.decode("cp1252") + _footer_commands(page_number, total_pages)
-        ).encode("cp1252", "replace")
-        stream_id = add_stream(stream_with_footer)
-        page_id = add_object(
-            (
-                f"<< /Type /Page /Parent {pages_id} 0 R "
-                f"/MediaBox [0 0 {PAGE_WIDTH} {PAGE_HEIGHT}] "
-                f"/Resources << /Font << /F1 {font_regular_id} 0 R /F2 {font_bold_id} 0 R >> >> "
-                f"/Contents {stream_id} 0 R >>"
-            ).encode("ascii")
+    for stream in page_streams:
+        stream_id = add_stream(stream)
+        page_ids.append(
+            add_object(
+                (
+                    f"<< /Type /Page /Parent {pages_id} 0 R "
+                    f"/MediaBox [0 0 {PAGE_WIDTH} {PAGE_HEIGHT}] "
+                    f"/Resources << /Font << /F1 {font_regular_id} 0 R /F2 {font_bold_id} 0 R >> >> "
+                    f"/Contents {stream_id} 0 R >>"
+                ).encode("ascii")
+            )
         )
-        page_ids.append(page_id)
 
     kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
     set_object(pages_id, f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode("ascii"))
     catalog_id = add_object(f"<< /Type /Catalog /Pages {pages_id} 0 R >>".encode("ascii"))
-
     return _serialize_pdf(objects, catalog_id)
 
 
 def _font_object(name: str) -> bytes:
-    """Declara fonte Type1 basica no documento PDF."""
     return f"<< /Type /Font /Subtype /Type1 /BaseFont /{name} /Encoding /WinAnsiEncoding >>".encode("ascii")
 
 
 def _serialize_pdf(objects: list[bytes], catalog_id: int) -> bytes:
-    """Serializa objetos PDF, tabela xref e trailer final."""
     content_parts = [b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"]
     offsets = [0]
     current_offset = len(content_parts[0])
-
     for object_id, content in enumerate(objects[1:], start=1):
         offsets.append(current_offset)
         object_bytes = f"{object_id} 0 obj\n".encode("ascii") + content + b"\nendobj\n"
         content_parts.append(object_bytes)
         current_offset += len(object_bytes)
-
     xref_offset = current_offset
     xref_parts = [f"xref\n0 {len(objects)}\n".encode("ascii"), b"0000000000 65535 f \n"]
     for offset in offsets[1:]:
         xref_parts.append(f"{offset:010d} 00000 n \n".encode("ascii"))
-
     trailer = f"trailer\n<< /Size {len(objects)} /Root {catalog_id} 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode("ascii")
     return b"".join(content_parts + xref_parts + [trailer])
 
@@ -412,30 +344,35 @@ def _fill_rect(x: float, y: float, width: float, height: float, r: float, g: flo
 
 
 def _stroke_rect(x: float, y: float, width: float, height: float, r: float, g: float, b: float) -> str:
-    return f"q {r:.3f} {g:.3f} {b:.3f} RG 0.7 w {x:.2f} {y:.2f} {width:.2f} {height:.2f} re S Q\n"
+    return f"q {r:.3f} {g:.3f} {b:.3f} RG 0.6 w {x:.2f} {y:.2f} {width:.2f} {height:.2f} re S Q\n"
 
 
-def _text(text: str, x: float, y: float, *, font: str = "F1", size: float = BODY_FONT_SIZE, color: tuple[float, float, float] = (0, 0, 0)) -> str:
+def _text(text: str, x: float, y: float, *, font: str = "F1", size: float = 8.5, color: tuple[float, float, float] = (0, 0, 0)) -> str:
     escaped = _pdf_escape(text)
     r, g, b = color
     return f"BT /{font} {size} Tf {r:.3f} {g:.3f} {b:.3f} rg {x:.2f} {y:.2f} Td ({escaped}) Tj ET\n"
 
 
 def _text_block(text: str, x: float, y: float, *, max_chars: int, size: float, color: tuple[float, float, float], leading: float) -> str:
-    lines = wrap(text, width=max_chars) or [""]
-    return "".join(_text(line, x, y - (index * leading), size=size, color=color) for index, line in enumerate(lines))
-
-
-def _text_block_lines(lines: list[str], x: float, y: float, *, size: float, leading: float, color: tuple[float, float, float] = (0.09, 0.14, 0.22)) -> list[str]:
-    return [_text(line, x, y - (index * leading), size=size, color=color) for index, line in enumerate(lines)]
+    lines: list[str] = []
+    current = ""
+    for part in text.split():
+        candidate = f"{current} {part}".strip()
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = part
+    if current:
+        lines.append(current)
+    return "".join(_text(line, x, y - (idx * leading), size=size, color=color) for idx, line in enumerate(lines))
 
 
 def _pdf_escape(value: str) -> str:
-    """Escapa texto para o conjunto minimo esperado no stream PDF."""
     text = value.encode("cp1252", "replace").decode("cp1252")
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _format_currency(value: float) -> str:
-    """Formata valor monetario em padrao brasileiro."""
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

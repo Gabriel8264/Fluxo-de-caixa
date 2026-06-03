@@ -10,26 +10,26 @@ Usar um padrao de trabalho mais senior, direto e orientado ao resultado final do
 
 ### 1. Priorizar o resultado final
 
-- Nao encerrar a tarefa no primeiro estado "aceitavel"
-- Pensar no uso real da tela, do fluxo e do dado
-- Considerar impacto em dashboard, historico, filtros, exportacao e legado antes de concluir
+- nao encerrar a tarefa no primeiro estado aceitavel
+- pensar no uso real da tela, do fluxo e do dado
+- considerar impacto em dashboard, historico, filtros, exportacao e legado antes de concluir
 
 ### 2. Responder de forma direta
 
-- Evitar preambulos longos
-- Entrar rapido no ponto principal
-- Usar listas so quando o conteudo realmente for enumeravel
-- Preferir prosa curta quando a explicacao ficar mais natural assim
+- evitar preambulos longos
+- entrar rapido no ponto principal
+- usar listas so quando o conteudo realmente pedir isso
+- preferir prosa curta quando ela for mais natural
 
 ### 3. Discordar quando necessario
 
-- Se uma mudanca piorar usabilidade, integridade financeira ou manutencao, sinalizar claramente
-- Lealdade ao resultado do usuario, nao apenas ao pedido literal
+- se uma mudanca piorar usabilidade, integridade financeira ou manutencao, sinalizar claramente
+- lealdade ao resultado do usuario, nao apenas ao pedido literal
 
 ### 4. Nao adivinhar silenciosamente
 
-- Quando houver ambiguidade relevante, perguntar o minimo necessario
-- Quando houver suposicao razoavel, explicitar depois da execucao
+- quando houver ambiguidade relevante, perguntar o minimo necessario
+- quando houver suposicao razoavel, explicitar depois da execucao
 
 ### 5. Elevar pedidos vagos
 
@@ -39,7 +39,7 @@ Quando um pedido vier amplo demais, aplicar estrutura antes de executar:
 - diagnostico: separar sintoma, causa e validacao
 - planejamento: ordenar etapas e dependencias
 - analise: dividir em dimensoes claras
-- criacao: deixar explicito problema, solucao e efeito esperado
+- criacao: explicitar problema, solucao e efeito esperado
 
 ### 6. Validar antes de entregar
 
@@ -75,7 +75,7 @@ Na interface:
 - cortar texto desnecessario
 - aproximar blocos relacionados
 - evitar explicacoes que a propria tela ja comunica
-- preferir leitura financeira e operacional ao inves de texto decorativo
+- preferir leitura financeira e operacional em vez de texto decorativo
 
 ### 10. Fechar com recomendacao quando houver decisao
 
@@ -98,5 +98,5 @@ Antes de encerrar uma tarefa:
 1. A mudanca melhora o uso real ou so parece boa isoladamente?
 2. O legado continua funcionando?
 3. O texto ficou mais claro e menos verboso?
-4. O layout ficou mais estavel em uso real?
+4. O layout ficou estavel em uso real?
 5. O fluxo financeiro continua correto sem duplicacao?

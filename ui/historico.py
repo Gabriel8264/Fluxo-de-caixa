@@ -125,6 +125,7 @@ class ToggleDropdown(ctk.CTkFrame):
         if self.is_open:
             return
 
+        width = max(self.winfo_width(), 220)
         popup = ctk.CTkToplevel(self)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
@@ -133,7 +134,6 @@ class ToggleDropdown(ctk.CTkFrame):
 
         x = self.winfo_rootx()
         y = self.winfo_rooty() + self.winfo_height() + 4
-        width = max(self.winfo_width(), 220)
         popup.geometry(f"{width}x1+{x}+{y}")
 
         container = ctk.CTkFrame(popup, fg_color=COLORS["surface"], corner_radius=12, border_width=1, border_color="#d8e2ef")

@@ -21,7 +21,7 @@ Cada periodo abre uma leitura dedicada com:
 - `Grafico`
 - `Registros`
 
-## 2. Estrutura geral atual
+## 2. Estrutura geral
 
 ### Tela 1: selecao do periodo
 
@@ -64,7 +64,7 @@ Metodos principais:
 
 ## 3. Estrategia de scroll
 
-O Historico nao usa mais `CTkScrollableFrame` como container principal.
+O Historico nao usa `CTkScrollableFrame` como container principal.
 
 Hoje a tela usa:
 
@@ -78,8 +78,8 @@ Excecao:
 
 Regras atuais:
 
-- fora da tabela, a roda do mouse move a pagina do Historico
-- em cima da tabela, a roda do mouse move apenas a tabela
+- fora da tabela, a roda move a pagina do Historico
+- em cima da tabela, a roda move apenas a tabela
 - evitar `bind_all` global
 - evitar mais de um scroll principal na mesma tela
 
@@ -138,7 +138,7 @@ Objetivo:
 - mostrar quanto saiu
 - mostrar saldo
 - apontar principais origens e destinos do dinheiro
-- manter foco em leitura consolidada, sem duplicar a aba `Registros`
+- manter foco em leitura consolidada
 
 ## 6. Aba Analise
 
@@ -152,7 +152,7 @@ Exibe indicadores como:
 - participacao por categoria
 - quantidade de entradas
 - quantidade de saidas
-- relacao entre entradas e saidas do periodo
+- relacao entre entradas e saidas
 
 Metodo principal:
 
@@ -161,8 +161,6 @@ Metodo principal:
 ## 7. Aba Grafico
 
 Responsavel pelas leituras visuais do periodo.
-
-Hoje a implementacao foi simplificada para estabilidade visual.
 
 Usa:
 
@@ -175,10 +173,9 @@ Metodo principal:
 
 - `_render_chart_tab`
 
-Observacao:
+Regra:
 
-- esta aba deve priorizar estabilidade e leitura objetiva
-- evitar excesso de itens visuais no mesmo bloco
+- priorizar estabilidade e leitura objetiva
 
 ## 8. Aba Registros
 
@@ -202,7 +199,7 @@ Filtros atuais:
 
 Ordenacao atual:
 
-- feita diretamente pelos cabecalhos da tabela
+- feita pelos cabecalhos da tabela
 - colunas ordenaveis:
   - `Data`
   - `Tipo`
@@ -217,8 +214,8 @@ Ordenacao atual:
   - crescente
   - decrescente
   - sem ordenacao
-- a volta para `sem ordenacao` usa a ordem original em memoria
-- filtros ativos devem continuar valendo durante a ordenacao
+- retorno para `sem ordenacao` usa a ordem original em memoria
+- filtros ativos devem continuar valendo
 
 Metodos principais:
 
@@ -230,9 +227,7 @@ Metodos principais:
 
 ## 9. Detalhes do registro
 
-Os detalhes do registro nao usam mais varios cards grandes separados.
-
-Hoje a leitura e uma ficha compacta unica:
+Os detalhes do registro usam uma ficha compacta unica:
 
 - linha superior com `Data · Tipo · Categoria`
 - valor destacado
@@ -244,7 +239,7 @@ Hoje a leitura e uma ficha compacta unica:
 
 Regras:
 
-- se houver anexo, o botao `Abrir anexo` da barra de acoes fica habilitado
+- se houver anexo, o botao `Abrir anexo` fica habilitado
 - se nao houver selecao, aparece uma mensagem simples
 - se o registro continuar existindo apos filtro ou ordenacao, a selecao deve ser preservada quando possivel
 
@@ -262,7 +257,7 @@ Modal de edicao:
 
 - `MovementEditorDialog`
 
-Esse modal usa `CTkScrollableFrame` proprio e bind de roda do mouse aplicado por helper.
+Esse modal usa `CTkScrollableFrame` proprio e bind de roda aplicado por helper.
 
 Compatibilidade importante ao editar:
 
@@ -270,7 +265,26 @@ Compatibilidade importante ao editar:
 - o registro deve continuar vinculado a sua data real
 - so deve impactar o painel diario atual se a data for alterada para o dia ativo
 
-## 11. Compatibilidade financeira e legado
+## 11. Exportacao pelo Historico
+
+O Historico e o ponto de acionamento da exportacao do periodo selecionado.
+
+Regras atuais:
+
+- a exportacao deve respeitar exatamente o periodo selecionado
+- o escopo pode ser diario, mensal ou anual
+- `ui/historico.py` repassa movimentos e metadados para:
+  - `services/excel.py`
+  - `services/pdf.py`
+
+Os metadados repassados incluem:
+
+- tipo da exportacao
+- label do periodo
+- data de geracao
+- resumo do periodo
+
+## 12. Compatibilidade financeira e legado
 
 O Historico precisa continuar legivel com:
 
@@ -284,7 +298,7 @@ O Historico precisa continuar legivel com:
 
 Regras financeiras importantes:
 
-- `serviço técnico` gera entrada bruta do servico
+- `servico tecnico` gera entrada bruta do servico
 - a comissao entra como saida
 - o valor da empresa nunca vira nova entrada
 - multiplos tecnicos nao podem duplicar lucro
@@ -295,16 +309,16 @@ Quando houver varios tecnicos:
 - a exportacao nao pode quebrar
 - os registros antigos continuam funcionando sem migracao obrigatoria
 
-## 12. Pontos sensiveis
+## 13. Pontos sensiveis
 
 - `ui/historico.py` continua grande
-- a tela mistura selecao, leitura, filtros, tabela, exportacao e modal
+- a tela mistura selecao, leitura, tabela, exportacao e modal
 - qualquer alteracao de layout deve ser testada com muito conteudo
-- a rolagem principal do Historico nao deve voltar a usar binds globais
+- a rolagem principal nao deve voltar a usar bind global
 - dropdowns customizados de `Ano`, `Mes` e `Dia` exigem teste de alternancia e clique fora
 - a tabela de `Registros` e o scroll principal nao devem brigar entre si
 
-## 13. Checklist recomendado ao mexer no Historico
+## 14. Checklist ao mexer no Historico
 
 - abrir selecao por `Ano`
 - abrir selecao por `Mes`
@@ -313,11 +327,11 @@ Quando houver varios tecnicos:
 - testar clique fora para fechar dropdown
 - trocar entre todas as abas
 - rolar a pagina fora da tabela
-- rolar a tabela de registros separadamente
+- rolar a tabela separadamente
 - testar com 10 registros
 - testar com 50 registros
 - testar com 100 registros
-- testar ordenacao de cabecalhos
+- testar ordenacao dos cabecalhos
 - testar retorno para `sem ordenacao`
 - editar um registro
 - excluir um registro
@@ -325,7 +339,7 @@ Quando houver varios tecnicos:
 - exportar Excel
 - exportar PDF
 
-## 14. Direcao recomendada para futuras melhorias
+## 15. Direcao recomendada para o futuro
 
 Se a tela crescer mais, separar em modulos menores:
 
@@ -336,4 +350,4 @@ Se a tela crescer mais, separar em modulos menores:
 - `HistoryRecordsPanel`
 - `MovementEditorDialog`
 
-Isso reduziria a complexidade de `ui/historico.py` e deixaria manutencao mais previsivel.
+Isso reduz a complexidade de `ui/historico.py` e deixa a manutencao mais previsivel.

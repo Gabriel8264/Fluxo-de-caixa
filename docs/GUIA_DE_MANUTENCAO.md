@@ -1,6 +1,6 @@
 # Guia de manutencao rapida
 
-Este arquivo foi pensado para acelerar futuras alteracoes no projeto.
+Este arquivo acelera futuras alteracoes no projeto.
 
 Complemento recomendado:
 
@@ -31,7 +31,7 @@ Complemento recomendado:
 - `services/cash_service.py`
 - `core/database.py`
 
-### Categorias e pessoas
+### Categorias, pessoas e tecnicos
 
 - `ui/cadastros.py`
 - `ui/widgets.py`
@@ -69,10 +69,10 @@ Complemento recomendado:
 1. Identificar a tela ou modulo afetado
 2. Confirmar se a logica esta na UI ou no servico
 3. Fazer a mudanca na menor area possivel
-4. Pensar em impacto no resultado final do usuario e no legado
+4. Pensar em impacto no resultado final e no legado
 5. Validar compilacao
 6. Instanciar `App()` para smoke test rapido
-7. Se for mudanca visual, abrir a tela e conferir uso real
+7. Se for mudanca visual, conferir uso real
 
 ## 3. Checklist de validacao rapida
 
@@ -83,9 +83,9 @@ Complemento recomendado:
 
 ### Se mexer em UI
 
-- conferir `wraplength`, `grid_columnconfigure`, `grid_rowconfigure`
+- conferir `wraplength`, `grid_columnconfigure` e `grid_rowconfigure`
 - testar janela maximizada
-- testar topo expandido e recolhido
+- testar navegação entre telas
 
 ### Se mexer em Historico
 
@@ -101,6 +101,7 @@ Complemento recomendado:
 - selecionar um registro
 - editar um registro
 - excluir um registro
+- abrir anexo
 - exportar Excel
 - exportar PDF
 
@@ -118,16 +119,24 @@ Complemento recomendado:
 - validar soma dos percentuais
 - validar bloqueio acima de `100%`
 - confirmar que o valor da empresa nao gera nova movimentacao
-- confirmar que o historico e o dashboard continuam corretos
+- confirmar que historico e dashboard continuam corretos
 - confirmar exportacao Excel e PDF sem quebra
 
-Leitura recomendada antes de mexer:
+### Se mexer em exportacao
 
-- `docs/SERVICO_TECNICO.md`
+- testar exportacao diaria
+- testar exportacao mensal
+- testar exportacao anual
+- testar poucos registros
+- testar muitos registros
+- testar descricoes longas
+- testar anexos
+- testar servico tecnico
+- testar multiplos tecnicos
 
 ## 4. Convencoes do projeto
 
-- tipos de movimentacao validos: `entrada` e `saida`
+- tipos validos de movimentacao: `entrada` e `saida`
 - data de armazenamento: `YYYY-MM-DD`
 - data exibida: `DD/MM/YYYY`
 - banco principal: `caixa.db`
@@ -145,18 +154,18 @@ Leitura recomendada antes de mexer:
 
 - navegacao do recorte
 - scroll principal da pagina
-- renderizacao dos cards e blocos planos
-- desenho dos graficos
+- renderizacao das abas
 - tabela e detalhe de registros
+- exportacao
 - modal de edicao
 
-Se a mudanca for grande, vale atuar por bloco e nao em tudo ao mesmo tempo.
+Se a mudanca for grande, atuar por bloco e nao na tela inteira de uma vez.
 
 ### Rolagem
 
 Hoje existem tres padroes de rolagem no projeto:
 
-- `CTkScrollableFrame` com bind helper em `ui/widgets.py`
+- `CTkScrollableFrame` com helper em `ui/widgets.py`
 - `Canvas + scrollbar` no Historico principal
 - `Treeview` com scroll proprio nas tabelas
 
@@ -165,32 +174,33 @@ Ao mexer em rolagem:
 - evitar `bind_all` global
 - evitar scroll duplicado na mesma area
 - manter apenas um scroll principal por tela, exceto tabelas
-- se houver tabela `Treeview`, a roda do mouse em cima dela deve mover apenas a tabela
+- se houver `Treeview`, a roda em cima dela deve mover apenas a tabela
 - no Historico, fora da tabela de `Registros`, a roda deve mover a pagina
 
 ### Textos com acentos
 
-Sempre revisar os textos renderizados na interface, especialmente quando o console mostrar caracteres estranhos. A interface precisa continuar legivel em portugues.
+Sempre revisar os textos renderizados na interface, especialmente quando o terminal mostrar caracteres estranhos. A interface precisa continuar legivel em portugues.
 
 ### Servico tecnico
 
 Regras operacionais importantes:
 
-- `serviço técnico` e uma operacao propria
+- `servico tecnico` e uma operacao propria
 - se houver varios tecnicos, a comissao total e a soma dos percentuais individuais
 - a divisao individual deve ser preservada para leitura futura
 - nao recalcular servicos antigos automaticamente
 - registros antigos sem tecnico ou sem comissao continuam validos
 - a saida pode ser uma por tecnico, desde que o total nao duplique lucro
 
-### Layout
+### Exportacao
 
-Evite colocar muita informacao na mesma linha. Em telas densas, prefira:
+Regras importantes:
 
-- cards em colunas
-- painel lateral de detalhe
-- submenus em `Tabview`
-- botoes de recolher areas grandes
+- nao alterar dados do banco durante a exportacao
+- respeitar o periodo selecionado no Historico
+- manter compatibilidade com registros antigos
+- exportacoes com tecnicos multiplos nao podem quebrar leitura
+- melhorias visuais nao devem alterar regra financeira
 
 ## 6. Atalhos para pedidos comuns
 
@@ -198,9 +208,9 @@ Evite colocar muita informacao na mesma linha. Em telas densas, prefira:
 
 Revisar:
 
-- `ui/app.py` para topo
-- `ui/historico.py` para cards e paines laterais
-- `ui/dashboard.py` para distribuicao dos blocos
+- `ui/app.py`
+- `ui/historico.py`
+- `ui/dashboard.py`
 
 ### "Quero mais filtros"
 
@@ -219,16 +229,24 @@ Revisar:
 
 Lembrar:
 
-- a ordenacao hoje segue ciclo de 3 estados
+- a ordenacao segue ciclo de 3 estados
 - `sem ordenacao -> crescente -> decrescente -> sem ordenacao`
 - ao remover a ordenacao, voltar para a ordem original em memoria, sem novo fetch
+
+### "Quero mudar exportacao"
+
+Revisar:
+
+- `services/excel.py`
+- `services/pdf.py`
+- `ui/historico.py`
 
 ### "Quero mudar o grafico"
 
 Revisar:
 
-- `ui/dashboard.py` para painel diario
-- `ui/historico.py` para historico
+- `ui/dashboard.py`
+- `ui/historico.py`
 
 ### "Quero mudar o banco"
 
@@ -241,6 +259,7 @@ Revisar:
 ## 7. Sugestoes para futuras melhorias
 
 - separar `ui/historico.py` em subcomponentes menores
-- criar helpers reutilizaveis para cards de detalhe
-- centralizar textos da interface em um modulo proprio
+- criar helpers reutilizaveis para fichas de detalhe
+- centralizar textos da interface em modulo proprio
 - adicionar testes automatizados para servicos e filtros
+- documentar a exportacao em arquivo proprio se ela crescer mais

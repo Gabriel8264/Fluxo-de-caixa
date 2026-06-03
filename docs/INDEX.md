@@ -1,144 +1,119 @@
-# Índice oficial da documentação
+# Indice oficial da documentacao
 
-Este arquivo é o ponto de entrada oficial da documentação do projeto.
+Este arquivo e o ponto de entrada oficial da documentacao do projeto.
 
-Antes de qualquer alteração, leitura de contexto, manutenção ou refatoração, este documento deve ser consultado para orientar:
+Use este indice para:
 
-- quais arquivos de documentação existem
-- quando cada documento deve ser lido
-- quais regras são obrigatórias
-- quais cuidados preservar em dados, interface e fluxo financeiro
+- identificar quais documentos existem
+- decidir o que precisa ser lido antes de cada alteracao
+- localizar a fonte oficial de regras por modulo
+- evitar regressao, quebra de legado e mudancas fora de escopo
 
-## Documentos disponíveis
+## Documentos disponiveis
 
 ### `docs/ARQUITETURA.md`
 
-Função:
+Funcao:
 
-- explicar a arquitetura geral do projeto
-- descrever camadas, fluxo de inicialização, persistência, serviços e responsabilidades da interface
-- registrar a estrutura atual do fluxo de `serviço técnico` e dos dados persistidos
+- descrever a estrutura geral do sistema
+- explicar camadas, inicializacao, persistencia e servicos
+- registrar o estado atual das exportacoes e do fluxo de servico tecnico
 
-Quando consultar:
+Ler antes de:
 
-- antes de alterações estruturais
-- antes de mexer em camadas de serviço, banco ou navegação principal
-- quando houver dúvida sobre onde uma regra deve ficar
-
-Agentes de IA devem ler antes de:
-
-- modificar `main.py`
-- modificar `core/`
-- modificar `services/`
-- alterar organização entre UI, serviço e persistência
+- alterar `main.py`
+- alterar `core/`
+- alterar `services/`
+- mexer em organizacao entre UI, servico e banco
 
 ### `docs/GABARITO_OPERACIONAL.md`
 
-Função:
+Funcao:
 
-- definir o padrão operacional de trabalho no projeto
-- orientar manutenção com foco em resultado real, validação, clareza e compatibilidade
+- definir o padrao de trabalho do projeto
+- orientar manutencao com foco em resultado real, clareza e compatibilidade
 
-Quando consultar:
+Ler antes de:
 
-- antes de mudanças relevantes
-- antes de concluir tarefas que afetam fluxo financeiro, usabilidade ou layout
-- quando houver dúvida sobre profundidade da validação
-
-Agentes de IA devem ler antes de:
-
-- qualquer alteração relevante de comportamento
-- mudanças em telas sensíveis
-- mudanças que possam afetar legado, exportação, dashboard ou histórico
+- mudancas relevantes de comportamento
+- refinamentos amplos de UX
+- alteracoes que possam afetar legado, exportacao, dashboard ou historico
 
 ### `docs/GUIA_DE_MANUTENCAO.md`
 
-Função:
+Funcao:
 
-- servir como guia rápido de manutenção
+- servir como guia pratico de manutencao
 - indicar onde mexer para cada tipo de pedido
-- fornecer checklists de validação e armadilhas conhecidas
-- consolidar cuidados práticos com rolagem, ordenação e compatibilidade retroativa
+- consolidar checklists de validacao
 
-Quando consultar:
+Ler antes de:
 
-- ao iniciar tarefas práticas de manutenção
-- ao decidir quais arquivos alterar
-- antes de validar UI, histórico, anexos, exportação ou rolagem
-
-Agentes de IA devem ler antes de:
-
-- alterar qualquer tela da interface
+- alterar telas da interface
 - mexer em rolagem
-- mexer em exportação
+- mexer em exportacao
 - mexer em anexos
-- mexer em filtros e extratos
+- mexer em filtros e tabelas
 
 ### `docs/HISTORICO.md`
 
-Função:
+Funcao:
 
-- documentar especificamente a aba `Histórico`
-- explicar seleção de período, abas, estratégia de scroll, registros, ordenação, detalhes e pontos sensíveis
+- documentar especificamente a tela `Historico`
+- explicar selecao de periodo, abas, scroll, registros, ordenacao e exportacao
 
-Quando consultar:
+Ler antes de:
 
-- antes de qualquer alteração em `ui/historico.py`
-- antes de mexer em seleção por ano, mês ou dia
-- antes de mexer em resumo, análise, gráfico, registros, edição ou exportação do histórico
-
-Agentes de IA devem ler antes de:
-
-- modificar a tela `Histórico`
-- alterar a estratégia de scroll do histórico
-- alterar renderização das abas do histórico
-- alterar tabela, filtros, detalhes ou exportações do histórico
+- alterar `ui/historico.py`
+- mexer em selecao por ano, mes ou dia
+- mexer em `Resumo`, `Analise`, `Grafico` ou `Registros`
+- mexer em exportacao acionada a partir do Historico
 
 ### `docs/SERVICO_TECNICO.md`
 
-Função:
+Funcao:
 
 - documentar o fluxo de `servico tecnico`
 - centralizar regras de comissao, multiplos tecnicos, persistencia e compatibilidade
 
-Quando consultar:
+Ler antes de:
 
-- antes de qualquer alteracao em `ui/registro.py`
-- antes de mexer em tecnicos, comissao ou resumo visual do servico
-- antes de alterar como o sistema salva ou exibe divisao de comissao
-
-Agentes de IA devem ler antes de:
-
-- modificar `services/cash_service.py` no fluxo de servico tecnico
-- modificar `ui/registro.py`
-- modificar exportacoes que precisem mostrar tecnicos
+- alterar `ui/registro.py`
+- alterar `services/cash_service.py` no fluxo de servico tecnico
+- alterar exportacoes que precisem mostrar tecnicos ou divisao de comissao
 
 ## Ordem recomendada de leitura
 
-### Para entendimento geral do projeto
+### Para entendimento geral
 
 1. `docs/INDEX.md`
 2. `docs/ARQUITETURA.md`
 3. `docs/GABARITO_OPERACIONAL.md`
 4. `docs/GUIA_DE_MANUTENCAO.md`
 
-### Para manutenção normal
+### Para manutencao normal
 
 1. `docs/INDEX.md`
-2. `docs/GUIA_DE_MANUTENCAO.md`
-3. documentação específica da área afetada
+2. documento especifico da area afetada
+3. `docs/GUIA_DE_MANUTENCAO.md` se houver implementacao pratica
 
-### Para alterações no Histórico
+### Para alteracoes no Historico
 
 1. `docs/INDEX.md`
 2. `docs/HISTORICO.md`
 3. `docs/GUIA_DE_MANUTENCAO.md`
 4. `docs/GABARITO_OPERACIONAL.md`
-5. `docs/ARQUITETURA.md` se houver impacto estrutural
 
-## Guia rápido por área do sistema
+### Para alteracoes em servico tecnico
 
-### Se for alterar arquitetura, banco, modelos ou serviços
+1. `docs/INDEX.md`
+2. `docs/SERVICO_TECNICO.md`
+3. `docs/ARQUITETURA.md`
+4. `docs/GUIA_DE_MANUTENCAO.md`
+
+## Guia rapido por area
+
+### Arquitetura, banco, modelos ou servicos
 
 Ler:
 
@@ -147,7 +122,7 @@ Ler:
 - `docs/GABARITO_OPERACIONAL.md`
 - `docs/GUIA_DE_MANUTENCAO.md`
 
-### Se for alterar layout, navegação ou widgets reutilizáveis
+### Layout, navegacao ou widgets reutilizaveis
 
 Ler:
 
@@ -155,16 +130,15 @@ Ler:
 - `docs/GUIA_DE_MANUTENCAO.md`
 - `docs/GABARITO_OPERACIONAL.md`
 
-### Se for alterar Novo registro, Dashboard, Cadastros, Extrato ou Anexos
+### Novo registro, dashboard, cadastros, extrato ou anexos
 
 Ler:
 
 - `docs/INDEX.md`
 - `docs/GUIA_DE_MANUTENCAO.md`
 - `docs/GABARITO_OPERACIONAL.md`
-- `docs/ARQUITETURA.md` se a alteração tocar serviço ou persistência
 
-### Se for alterar serviço técnico, técnicos ou comissão
+### Servico tecnico, tecnicos ou comissao
 
 Ler:
 
@@ -172,9 +146,8 @@ Ler:
 - `docs/SERVICO_TECNICO.md`
 - `docs/ARQUITETURA.md`
 - `docs/GUIA_DE_MANUTENCAO.md`
-- `docs/GABARITO_OPERACIONAL.md`
 
-### Se for alterar Histórico
+### Historico
 
 Ler:
 
@@ -183,97 +156,104 @@ Ler:
 - `docs/GUIA_DE_MANUTENCAO.md`
 - `docs/GABARITO_OPERACIONAL.md`
 
-## Regras obrigatórias
+### Exportacao Excel e PDF
 
-- Sempre ler `INDEX.md` antes de qualquer alteração.
-- Sempre ler a documentação relacionada ao módulo que será alterado.
-- Considerar a documentação como fonte oficial de verdade.
+Ler:
+
+- `docs/INDEX.md`
+- `docs/ARQUITETURA.md`
+- `docs/GUIA_DE_MANUTENCAO.md`
+- `docs/SERVICO_TECNICO.md` se a exportacao precisar mostrar dados de tecnicos
+
+## Regras obrigatorias
+
+- Sempre ler `INDEX.md` antes de qualquer alteracao.
+- Sempre ler a documentacao relacionada ao modulo que sera alterado.
+- Considerar a documentacao como fonte oficial de verdade.
 - Preservar compatibilidade com dados antigos.
-- Não criar regressões em funcionalidades existentes.
-- Em caso de conflito entre documentação e código, reportar o conflito antes de implementar.
+- Nao criar regressao em funcionalidades existentes.
+- Em caso de conflito entre documentacao e codigo, reportar o conflito antes de implementar.
 
 ## Limite de escopo
 
-A documentação deve orientar a tarefa atual, não substituir a solicitação do usuário.
+A documentacao deve orientar a tarefa atual, nao substituir a solicitacao do usuario.
 
-Agentes de IA não devem resolver problemas antigos, pendências anteriores ou melhorias sugeridas na documentação, a menos que a solicitação atual peça isso explicitamente.
+Agentes de IA nao devem resolver problemas antigos, pendencias anteriores ou melhorias sugeridas na documentacao, a menos que a solicitacao atual peca isso explicitamente.
 
-Ao ler a documentação, use-a apenas para:
+Ao ler a documentacao, use-a apenas para:
 
 - entender regras
-- evitar regressões
+- evitar regressao
 - localizar arquivos corretos
 - validar compatibilidade
 
-## Regras importantes repetidas na documentação
+## Regras importantes repetidas nos documentos
 
-Estas regras aparecem de forma recorrente nos documentos existentes e devem ser tratadas como diretrizes fortes do projeto:
-
-### 1. Compatibilidade retroativa é obrigatória
+### 1. Compatibilidade retroativa e obrigatoria
 
 - registros antigos precisam continuar funcionando
 - novos campos devem ter fallback seguro
-- entradas e saídas antigas continuam válidas
-- ausência de técnico ou comissão não pode quebrar leitura, exportação, dashboard ou histórico
-- serviços antigos com um técnico continuam válidos
+- entradas e saidas antigas continuam validas
+- ausencia de tecnico ou comissao nao pode quebrar leitura, exportacao, dashboard ou historico
+- servicos antigos com um tecnico continuam validos
 
-### 2. O fluxo financeiro não pode ser distorcido
+### 2. O fluxo financeiro nao pode ser distorcido
 
-- não duplicar lucro
-- não criar movimentações extras indevidas
-- manter consistência entre UI, serviço, banco, dashboard, exportação e fechamento mensal
-- em `serviço técnico`, o valor da empresa é apenas resumo visual
+- nao duplicar lucro
+- nao criar movimentacoes extras indevidas
+- manter consistencia entre UI, servico, banco, dashboard, exportacao e fechamento mensal
+- em `servico tecnico`, o valor da empresa e apenas resumo visual
 
 ### 3. Validar antes de entregar
 
-- compilar módulos alterados
-- instanciar `App()` quando possível
+- compilar modulos alterados
+- instanciar `App()` quando possivel
 - testar o fluxo principal afetado
-- revisar impacto em histórico, exportação, filtros, dashboard e legado
+- revisar impacto em historico, exportacao, filtros, dashboard e legado
 
-### 4. Reduzir ruído visual
+### 4. Reduzir ruido visual
 
-- cortar texto desnecessário
-- evitar excesso de informação simultânea
+- cortar texto desnecessario
+- evitar excesso de informacao simultanea
 - aproximar blocos relacionados
 - priorizar leitura objetiva e operacional
 
-### 5. Evitar soluções frágeis
+### 5. Evitar solucoes frageis
 
-- preferir a menor área de mudança possível
+- preferir a menor area de mudanca possivel
 - sistematizar quando o problema for recorrente
-- evitar soluções improvisadas que resolvem só um caso local
+- evitar solucao improvisada para um caso local
 
 ### 6. Scroll e layout exigem cuidado especial
 
 - evitar `bind_all` global
-- evitar múltiplos scrolls principais na mesma tela
-- manter um único scroll principal por tela, exceto tabelas
-- mudanças visuais precisam de validação em uso real
+- evitar multiplos scrolls principais na mesma tela
+- manter um unico scroll principal por tela, exceto tabelas
+- mudancas visuais precisam de validacao em uso real
 
-### 7. Tabelas administrativas seguem o mesmo padrão de ordenação
+### 7. Tabelas administrativas seguem o mesmo padrao de ordenacao
 
-- ordenação por clique no cabeçalho
-- ciclo: sem ordenação -> crescente -> decrescente -> sem ordenação
-- o retorno a `sem ordenação` usa a ordem original em memória
+- ordenacao por clique no cabecalho
+- ciclo: sem ordenacao -> crescente -> decrescente -> sem ordenacao
+- retorno para `sem ordenacao` usa a ordem original em memoria
 - filtros ativos devem continuar valendo
 
-### 8. O Histórico é a área mais sensível do sistema
+### 8. O Historico e a area mais sensivel do sistema
 
-- qualquer alteração em `ui/historico.py` exige leitura prévia da documentação específica
-- testar seleção por ano, mês e dia
+- qualquer alteracao em `ui/historico.py` exige leitura previa da documentacao especifica
+- testar selecao por ano, mes e dia
 - testar todas as abas
-- testar registros, edição, exclusão, anexos e exportações
+- testar registros, edicao, exclusao, anexos e exportacoes
 
-## Fonte oficial por tipo de decisão
+## Fonte oficial por tipo de decisao
 
-### Estrutura e responsabilidade de módulos
+### Estrutura e responsabilidade de modulos
 
 Fonte principal:
 
 - `docs/ARQUITETURA.md`
 
-### Forma correta de conduzir manutenção
+### Forma correta de conduzir manutencao
 
 Fonte principal:
 
@@ -285,30 +265,18 @@ Fonte principal:
 
 - `docs/GUIA_DE_MANUTENCAO.md`
 
-### Regras específicas da aba Histórico
+### Regras especificas da aba Historico
 
 Fonte principal:
 
 - `docs/HISTORICO.md`
 
-### Regras específicas de serviço técnico
+### Regras especificas de servico tecnico
 
 Fonte principal:
 
 - `docs/SERVICO_TECNICO.md`
 
-## Conduta esperada de agentes de IA
+## Observacao final
 
-Antes de alterar qualquer parte do projeto, agentes de IA devem:
-
-1. Ler `docs/INDEX.md`.
-2. Identificar a área afetada.
-3. Ler o documento específico correspondente.
-4. Confirmar impacto em legado, fluxo financeiro, exportação e dashboard.
-5. Executar a mudança na menor superfície possível.
-6. Validar compilação e fluxo principal.
-7. Reportar conflitos entre documentação e código antes de implementar.
-
-## Observação final
-
-Se novos documentos forem adicionados à pasta `docs`, este índice deve ser atualizado para continuar sendo o ponto de entrada oficial da documentação do projeto.
+Se novos documentos forem adicionados a pasta `docs`, este indice deve ser atualizado para continuar sendo o ponto de entrada oficial da documentacao do projeto.

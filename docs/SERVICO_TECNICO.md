@@ -152,13 +152,13 @@ Nas saidas:
 - `tipo = saida`
 - `papel_servico = comissao_tecnica`
 - cada tecnico pode receber sua propria saida
-- cada saida guarda o percentual e valor individual do tecnico
+- cada saida guarda percentual e valor individual
 
 ## 7. Interface do Novo registro
 
 No modo `servico tecnico`, a tela deve:
 
-- esconder `Categoria` como campo manual do usuario
+- esconder `Categoria` como campo manual
 - mostrar selecao de tecnicos
 - mostrar tecnicos selecionados em chips compactos
 - mostrar resumo visual de:
@@ -166,7 +166,7 @@ No modo `servico tecnico`, a tela deve:
   - valor da empresa
   - divisao da comissao
 
-Textos da interface devem permanecer em portugues legivel:
+Textos da interface devem permanecer legiveis em portugues:
 
 - `Servico tecnico`
 - `Tecnicos responsaveis`
@@ -221,5 +221,5 @@ Quando o sistema precisar tratar um servico antigo com um tecnico:
 Se houver qualquer duvida ao alterar esse fluxo, preservar sempre:
 
 - compatibilidade com dados antigos
-- uma unica leitura financeira coerente
+- uma leitura financeira coerente
 - ausencia de duplicacao de lucro
