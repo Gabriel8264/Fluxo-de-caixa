@@ -173,6 +173,14 @@ Ler:
 - `docs/GUIA_DE_MANUTENCAO.md`
 - `docs/SERVICO_TECNICO.md` se a exportacao precisar mostrar dados de tecnicos
 
+### Build do executavel
+
+Ler:
+
+- `docs/INDEX.md`
+- `docs/ARQUITETURA.md`
+- `docs/GUIA_DE_MANUTENCAO.md`
+
 ## Regras obrigatorias
 
 - Sempre ler `INDEX.md` antes de qualquer alteracao.

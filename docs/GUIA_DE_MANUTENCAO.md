@@ -64,6 +64,12 @@ Complemento recomendado:
 - `FluxoDeCaixaDiario.spec`
 - `core/app_paths.py`
 
+Fluxo atual:
+
+- rodar `.\build_exe.ps1`
+- o script usa a virtualenv local e chama `PyInstaller`
+- o resultado fica em `dist/`
+
 ## 2. Fluxo recomendado para alteracoes
 
 1. Identificar a tela ou modulo afetado
@@ -80,6 +86,12 @@ Complemento recomendado:
 
 - `.\.venv\Scripts\python.exe -m compileall ui services core`
 - importar `App` e instanciar sem erro
+
+### Se mexer em build do executavel
+
+- rodar `.\build_exe.ps1`
+- confirmar geracao do arquivo em `dist/`
+- abrir o executavel para smoke test quando a mudanca afetar empacotamento, caminhos ou recursos
 
 ### Se mexer em UI
 

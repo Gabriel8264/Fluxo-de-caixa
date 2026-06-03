@@ -322,6 +322,7 @@ O projeto foi ajustado para funcionar fora do ambiente de desenvolvimento:
 - `core/app_paths.py` calcula caminhos em modo normal e congelado
 - `FluxoDeCaixaDiario.spec` empacota recursos
 - `build_exe.ps1` automatiza o build
+- o executavel gerado atualmente sai em `dist/Fluxo de caixa diario.exe` ou nome equivalente definido na `.spec`
 
 ## 12. Pontos de atencao
 
