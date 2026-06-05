@@ -97,6 +97,8 @@ Fluxo atual:
 
 - conferir `wraplength`, `grid_columnconfigure` e `grid_rowconfigure`
 - testar janela maximizada
+- novas janelas e modais devem usar `center_window()` de `ui/widgets.py`
+- validar centralizacao horizontal e vertical em relacao a janela pai, especialmente em Windows com escala/DPI
 - testar navegação entre telas
 
 ### Se mexer em Historico
@@ -201,18 +203,58 @@ Campos de valor digitaveis devem usar `MoneyMaskEntry` de `ui/widgets.py`.
 Regras atuais:
 
 - inteiros sao tratados como reais: `100` vira `100,00`
-- virgula e ponto podem ser separador decimal: `12,50` e `12.50` viram `12,50`
+- virgula e o separador decimal principal: `12,50` vira `12,50`
+- ponto e separador de milhar quando houver grupo de tres digitos: `2.000` vira `2.000,00`, nunca `2,00`
+- ponto pode ser decimal apenas em entrada simples: `12.50` vira `12,50`
 - letras e simbolos invalidos sao removidos
 - no maximo duas casas decimais
 - exibicao final em padrao brasileiro: `1.234,56`
-- ao salvar, `services/cash_service.py` normaliza para `float`
+- a conversao unica de texto monetario brasileiro para numero fica em `core/money.py`
+- antes de salvar, campos monetarios devem chamar `format_current()` para normalizar o valor mesmo se o usuario nao sair do campo
+- ao salvar, `services/cash_service.py` usa essa conversao para normalizar para `float`
+
+Exemplos obrigatorios:
+
+- `100` -> `100.0`
+- `1000` -> `1000.0`
+- `2.000` -> `2000.0`
+- `2000` -> `2000.0`
+- `2.000,50` -> `2000.5`
+- `2000,50` -> `2000.5`
+- `12,50` -> `12.5`
+- `12.50` -> `12.5`
 
 Validar em:
 
 - Novo registro
 - Adicionar fundos e Remover fundos no Painel diario
+- Definir saldo real no Caixa da empresa
 - edicao de registro no Historico
 - comissao do tecnico, quando usar o mesmo componente
+
+### Caixa da empresa
+
+O submenu `Caixa da empresa` fica em `ui/dashboard.py` e usa regras de negocio de `services/cash_service.py`.
+
+Regras atuais:
+
+- `Adicionar fundos` e `Remover fundos` criam ajustes manuais sem criar movimentacoes comuns.
+- `Definir saldo real` recebe o novo saldo real e cria apenas um ajuste manual compensatorio pela diferenca.
+- se o novo saldo real for igual ao saldo atual, nenhum ajuste e criado.
+- a descricao em `Definir saldo real` e opcional.
+- a janela `Definir saldo real` deve manter os botoes `Confirmar` e `Cancelar` sempre visiveis, sem depender de rolagem.
+- excluir ou editar ajustes manuais deve recalcular saldos derivados sem alterar entradas, saidas, Historico comum ou exportacoes.
+
+Estrutura visual esperada:
+
+- usar um unico container principal para o submenu.
+- criar uma vez os blocos de cards, indicadores, historico e botoes.
+- no refresh, atualizar textos dos cards/indicadores e recarregar apenas as linhas da tabela.
+- nao destruir e recriar cards, indicadores ou botoes a cada atualizacao.
+- manter os botoes abaixo da tabela de ajustes.
+- manter a tabela com altura fixa razoavel e scroll proprio.
+- nao misturar gerenciadores de geometria no mesmo frame.
+- validar rolagem rapida, troca de abas e operacoes de ajuste sem sobreposicao, duplicacao ou textos fantasmas.
 
 ### Servico tecnico
 

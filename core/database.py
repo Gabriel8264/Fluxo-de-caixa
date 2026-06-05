@@ -383,6 +383,65 @@ class DatabaseManager:
             adjustment.id = int(cur.lastrowid)
         return adjustment
 
+    def update_company_cash_adjustment(self, adjustment: CompanyCashAdjustment) -> None:
+        """Atualiza um ajuste manual existente sem criar novo registro."""
+        if adjustment.id is None:
+            raise ValueError("Ajuste não encontrado.")
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                UPDATE company_cash_adjustments
+                SET date = ?,
+                    type = ?,
+                    amount = ?,
+                    description = ?,
+                    balance_before = ?,
+                    balance_after = ?
+                WHERE id = ?
+                """,
+                (
+                    adjustment.data,
+                    adjustment.tipo,
+                    adjustment.valor,
+                    adjustment.descricao,
+                    adjustment.saldo_antes,
+                    adjustment.saldo_depois,
+                    adjustment.id,
+                ),
+            )
+            if cur.rowcount == 0:
+                raise ValueError("Ajuste não encontrado.")
+            con.commit()
+
+    def delete_company_cash_adjustment(self, adjustment_id: int) -> None:
+        """Remove um ajuste manual pelo id."""
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.execute("DELETE FROM company_cash_adjustments WHERE id = ?", (adjustment_id,))
+            if cur.rowcount == 0:
+                raise ValueError("Ajuste nao encontrado.")
+            con.commit()
+
+    def update_company_cash_adjustment_balances(self, adjustments: list[CompanyCashAdjustment]) -> None:
+        """Atualiza apenas saldos derivados dos ajustes manuais."""
+        with closing(self.connect()) as con:
+            cur = con.cursor()
+            cur.executemany(
+                """
+                UPDATE company_cash_adjustments
+                SET balance_before = ?,
+                    balance_after = ?
+                WHERE id = ?
+                """,
+                [
+                    (adjustment.saldo_antes, adjustment.saldo_depois, adjustment.id)
+                    for adjustment in adjustments
+                    if adjustment.id is not None
+                ],
+            )
+            con.commit()
+
     def list_company_cash_adjustments(self) -> list[CompanyCashAdjustment]:
         """Lista o histórico próprio de ajustes do caixa da empresa."""
         with closing(self.connect()) as con:

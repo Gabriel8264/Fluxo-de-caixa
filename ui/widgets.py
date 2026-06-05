@@ -12,7 +12,72 @@ from tkinter import font as tkfont, ttk
 
 import customtkinter as ctk
 
+from core.money import brazilian_decimal_separator_index, parse_brazilian_money, parse_brazilian_money_parts
 from ui.theme import COLORS, FONTS
+
+
+def center_window(
+    window: tk.Misc,
+    *,
+    parent: tk.Misc | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    y_offset: int = 0,
+) -> None:
+    """Centraliza uma janela Tk/CustomTkinter em relacao ao pai ou a tela.
+
+    Quando `width` e `height` sao informados, eles sao preservados na geometry
+    final. As coordenadas usam medidas do proprio Tk para respeitar escala/DPI.
+    """
+
+    try:
+        if width is not None and height is not None:
+            window.geometry(f"{width}x{height}")
+        window.update_idletasks()
+    except tk.TclError:
+        return
+
+    modal_width = max(width or 0, 1)
+    modal_height = max(height or 0, 1)
+    if width is None:
+        modal_width = max(window.winfo_width(), window.winfo_reqwidth(), 1)
+    if height is None:
+        modal_height = max(window.winfo_height(), window.winfo_reqheight(), 1)
+
+    parent_widget = parent
+    if parent_widget is not None:
+        try:
+            parent_widget.update_idletasks()
+            parent_x = parent_widget.winfo_rootx()
+            parent_y = parent_widget.winfo_rooty()
+            parent_width = parent_widget.winfo_width()
+            parent_height = parent_widget.winfo_height()
+        except tk.TclError:
+            parent_widget = None
+        else:
+            if parent_width <= 1 or parent_height <= 1:
+                parent_widget = None
+
+    has_valid_parent = parent_widget is not None
+    if parent_widget is None:
+        parent_x = 0
+        parent_y = 0
+        parent_width = window.winfo_screenwidth()
+        parent_height = window.winfo_screenheight()
+
+    final_width = width or modal_width
+    final_height = height or modal_height
+    x = parent_x + (parent_width - modal_width) // 2
+    y = parent_y + (parent_height - modal_height) // 2 + y_offset
+    if has_valid_parent:
+        x = max(x, 0)
+        y = max(y, 0)
+    else:
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = max(0, min(x, max(screen_width - modal_width, 0)))
+        y = max(0, min(y, max(screen_height - modal_height, 0)))
+    window.geometry(f"{final_width}x{final_height}+{x}+{y}")
 
 
 def _mousewheel_steps(event) -> int:
@@ -307,16 +372,20 @@ class MoneyMaskEntry(ctk.CTkEntry):
     @classmethod
     def format_value(cls, value: str | float | int) -> str:
         """Converte texto ou numero para exibicao monetaria brasileira."""
-        text = str(value).strip()
-        if not text:
+        if not str(value).strip():
             return ""
-        parsed = cls._parse_parts(text)
+        parsed = cls._parse_parts(value)
         if parsed is None:
             return ""
         integer_part, decimal_part = parsed
         integer_value = int(integer_part or "0")
         grouped = f"{integer_value:,}".replace(",", ".")
         return f"{grouped},{decimal_part.ljust(2, '0')[:2]}"
+
+    @classmethod
+    def to_float(cls, value: str | float | int) -> float:
+        """Converte texto monetario brasileiro para float."""
+        return parse_brazilian_money(value)
 
     @classmethod
     def _sanitize(cls, value: str) -> str:
@@ -337,35 +406,12 @@ class MoneyMaskEntry(ctk.CTkEntry):
         return f"{integer_value:,}".replace(",", ".")
 
     @classmethod
-    def _parse_parts(cls, value: str) -> tuple[str, str] | None:
-        cleaned = "".join(char for char in str(value).strip() if char.isdigit() or char in ",.")
-        if not cleaned:
-            return None
-
-        decimal_separator = cls._decimal_separator_index(cleaned)
-        if decimal_separator is not None:
-            last_separator = decimal_separator
-            decimal_digits = "".join(char for char in cleaned[last_separator + 1 :] if char.isdigit())
-            integer_digits = "".join(char for char in cleaned[:last_separator] if char.isdigit()) or "0"
-            return integer_digits, decimal_digits[:2] or "00"
-
-        digits = "".join(char for char in cleaned if char.isdigit())
-        if not digits:
-            return None
-        return digits, "00"
+    def _parse_parts(cls, value: str | float | int) -> tuple[str, str] | None:
+        return parse_brazilian_money_parts(value)
 
     @staticmethod
     def _decimal_separator_index(cleaned: str) -> int | None:
-        separators = [index for index, char in enumerate(cleaned) if char in ",."]
-        if not separators:
-            return None
-        last_separator = separators[-1]
-        decimal_digits = "".join(char for char in cleaned[last_separator + 1 :] if char.isdigit())
-        if cleaned[last_separator] == ",":
-            return last_separator
-        if len(decimal_digits) <= 2:
-            return last_separator
-        return None
+        return brazilian_decimal_separator_index(cleaned)
 
     def _replace_text(self, text: str) -> None:
         self._formatting = True
@@ -712,6 +758,7 @@ class TechnicianManagerFrame(SectionFrame):
 
     def save_item(self) -> None:
         """Cria ou atualiza técnico conforme a seleção atual."""
+        self.commission_entry.format_current()
         name = self.name_entry.get().strip()
         commission = self.commission_entry.get().strip()
         status = self.status_selector.get()

@@ -13,6 +13,7 @@ from datetime import date, datetime
 from uuid import uuid4
 
 from core.database import DatabaseManager
+from core.money import parse_brazilian_money
 from core.models import CompanyCashAdjustment, CycleSummary, DailyFlowSummary, Movement, MovementType, PAYMENT_METHODS, RegistryItem, Technician
 from services.session_service import SessionService
 
@@ -354,6 +355,71 @@ class CashService:
         """Lista o histórico auditável de ajustes manuais do caixa da empresa."""
         return self.repository.list_company_cash_adjustments()
 
+    def update_company_cash_adjustment(
+        self,
+        *,
+        adjustment_id: int,
+        tipo: str,
+        valor: str | float,
+        descricao: str,
+        data_movimento: str | None,
+    ) -> CompanyCashAdjustment:
+        """Edita um ajuste manual existente e recalcula saldos derivados."""
+        existing = self._get_company_cash_adjustment(adjustment_id)
+        updated = self._build_company_cash_adjustment(
+            tipo=tipo,
+            valor=valor,
+            descricao=descricao,
+            data_movimento=data_movimento,
+            balance_before=existing.saldo_antes,
+            created_at=existing.created_at,
+            adjustment_id=existing.id,
+        )
+        self.repository.update_company_cash_adjustment(updated)
+        self.recalculate_company_cash_adjustment_balances()
+        return self._get_company_cash_adjustment(adjustment_id)
+
+    def delete_company_cash_adjustment(self, adjustment_id: int) -> None:
+        """Exclui um ajuste manual e recalcula os saldos derivados restantes."""
+        self._get_company_cash_adjustment(adjustment_id)
+        self.repository.delete_company_cash_adjustment(adjustment_id)
+        self.recalculate_company_cash_adjustment_balances()
+
+    def define_company_cash_balance(
+        self,
+        *,
+        novo_saldo: str | float,
+        descricao: str,
+        data_movimento: str | None = None,
+    ) -> CompanyCashAdjustment | None:
+        """Cria um ajuste compensatorio para chegar ao saldo real informado."""
+        target_balance = round(self._normalize_non_negative_amount(novo_saldo), 2)
+        cleaned_description = descricao.strip()
+        current_balance = round(float(self.get_company_cash_overview()["saldo_real"]), 2)
+        difference = round(target_balance - current_balance, 2)
+        if difference == 0:
+            return None
+        adjustment_type = "add_funds" if difference > 0 else "withdraw_funds"
+        return self._register_company_cash_adjustment(
+            tipo=adjustment_type,
+            valor=abs(difference),
+            descricao=cleaned_description,
+            data_movimento=data_movimento,
+        )
+
+    def recalculate_company_cash_adjustment_balances(self) -> list[CompanyCashAdjustment]:
+        """Recalcula saldos antes/depois dos ajustes sem alterar movimentos comuns."""
+        adjustments = self.list_company_cash_adjustments()
+        ordered = sorted(adjustments, key=lambda item: (item.data, item.id or 0))
+        running_balance = round(float(self.get_summary(active_day_only=False)["saldo"]), 2)
+        for adjustment in ordered:
+            adjustment.saldo_antes = running_balance
+            signed_amount = adjustment.valor if adjustment.tipo == "add_funds" else -adjustment.valor
+            running_balance = round(running_balance + signed_amount, 2)
+            adjustment.saldo_depois = running_balance
+        self.repository.update_company_cash_adjustment_balances(ordered)
+        return self.list_company_cash_adjustments()
+
     def get_history_tree(self) -> dict[str, dict[str, list[str]]]:
         """Monta arvore de historico por ano, mes e dia para a UI."""
         tree: dict[str, dict[str, list[str]]] = {}
@@ -597,27 +663,53 @@ class CashService:
         data_movimento: str | None,
     ) -> CompanyCashAdjustment:
         """Cria um ajuste manual auditável do caixa da empresa."""
+        overview = self.get_company_cash_overview()
+        adjustment = self._build_company_cash_adjustment(
+            tipo=tipo,
+            valor=valor,
+            descricao=descricao,
+            data_movimento=data_movimento,
+            balance_before=float(overview["saldo_real"]),
+        )
+        saved = self.repository.add_company_cash_adjustment(adjustment)
+        self.recalculate_company_cash_adjustment_balances()
+        return self._get_company_cash_adjustment(saved.id or 0)
+
+    def _build_company_cash_adjustment(
+        self,
+        *,
+        tipo: str,
+        valor: str | float,
+        descricao: str,
+        data_movimento: str | None,
+        balance_before: float,
+        created_at: str | None = None,
+        adjustment_id: int | None = None,
+    ) -> CompanyCashAdjustment:
+        """Valida campos de ajuste manual e monta o objeto de domínio."""
         normalized_type = tipo.strip().lower()
         if normalized_type not in {"add_funds", "withdraw_funds"}:
             raise ValueError("Tipo de ajuste inválido.")
         amount = round(self._normalize_amount(valor), 2)
-        description = descricao.strip()
         movement_date = self._normalize_date(data_movimento) if data_movimento else date.today().isoformat()
-
-        overview = self.get_company_cash_overview()
-        balance_before = float(overview["saldo_real"])
         signed_amount = amount if normalized_type == "add_funds" else -amount
-        balance_after = round(balance_before + signed_amount, 2)
-        adjustment = CompanyCashAdjustment(
+        return CompanyCashAdjustment(
             tipo=normalized_type,
             valor=amount,
-            descricao=description,
+            descricao=descricao.strip(),
             data=movement_date,
-            saldo_antes=balance_before,
-            saldo_depois=balance_after,
-            created_at=datetime.now().isoformat(timespec="seconds"),
+            saldo_antes=round(float(balance_before), 2),
+            saldo_depois=round(float(balance_before) + signed_amount, 2),
+            created_at=created_at or datetime.now().isoformat(timespec="seconds"),
+            id=adjustment_id,
         )
-        return self.repository.add_company_cash_adjustment(adjustment)
+
+    def _get_company_cash_adjustment(self, adjustment_id: int) -> CompanyCashAdjustment:
+        """Busca ajuste manual por id."""
+        for adjustment in self.list_company_cash_adjustments():
+            if adjustment.id == adjustment_id:
+                return adjustment
+        raise ValueError("Ajuste não encontrado.")
 
     def _history_period_bounds(self, *, year: str, month: str | None, day: str | None) -> tuple[str, str]:
         """Calcula intervalo ISO do recorte historico selecionado."""
@@ -753,18 +845,23 @@ class CashService:
     @staticmethod
     def _normalize_amount(value: str | float) -> float:
         """Normaliza valor monetario vindo da UI para float positivo."""
-        if isinstance(value, str):
-            cleaned = value.strip()
-            if "," in cleaned:
-                cleaned = cleaned.replace(".", "").replace(",", ".")
-        else:
-            cleaned = str(value)
         try:
-            amount = float(cleaned)
+            amount = parse_brazilian_money(value)
         except ValueError as exc:
             raise ValueError("Informe um valor numérico válido.") from exc
         if amount <= 0:
             raise ValueError("O valor deve ser maior que zero.")
+        return amount
+
+    @staticmethod
+    def _normalize_non_negative_amount(value: str | float) -> float:
+        """Normaliza valor monetario permitindo zero."""
+        try:
+            amount = parse_brazilian_money(value)
+        except ValueError as exc:
+            raise ValueError("Informe um valor numerico valido.") from exc
+        if amount < 0:
+            raise ValueError("O valor deve ser maior ou igual a zero.")
         return amount
 
     @staticmethod

@@ -225,7 +225,7 @@ Metodos principais:
 - `_render_records`
 - `_render_selected_movement`
 
-Ao editar um registro, o campo `Valor` usa `MoneyMaskEntry` e deve exibir valores carregados no padrao brasileiro (`120.0` -> `120,00`, `1.234,56`). A mascara trata inteiros como reais, aceita virgula ou ponto como separador decimal e o servico normaliza o valor para `float` ao salvar.
+Ao editar um registro, o campo `Valor` usa `MoneyMaskEntry` e deve exibir valores carregados no padrao brasileiro (`120.0` -> `120,00`, `1.234,56`). A mascara trata inteiros como reais, usa virgula como separador decimal, interpreta ponto como milhar em entradas como `2.000` e aceita ponto decimal apenas em entrada simples como `12.50`. Antes de salvar, o campo deve chamar `format_current()`; o servico normaliza o valor para `float` com a conversao central de `core/money.py`.
 
 ## 9. Detalhes do registro
 

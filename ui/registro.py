@@ -537,6 +537,7 @@ class RegisterView(ctk.CTkScrollableFrame):
     def save(self) -> None:
         """Valida e salva a movimentação, depois limpa o formulário."""
         is_service = self.type_selector.get() == self.SERVICE_OPERATION
+        self.value_entry.format_current()
         if not is_service and self.category_selector.get() == "Sem categorias":
             messagebox.showerror("Cadastro inválido", "Cadastre ao menos uma categoria antes de lançar movimentações.")
             return

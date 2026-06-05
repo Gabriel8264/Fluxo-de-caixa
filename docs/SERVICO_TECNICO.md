@@ -174,7 +174,7 @@ Textos da interface devem permanecer legiveis em portugues:
 - `Divisao da comissao`
 - `Valor da empresa`
 
-O campo de percentual de comissao do tecnico usa a mesma mascara numerica `MoneyMaskEntry`, exibindo no padrao `0,00`. Exemplos validos: `10`, `10,00` e `10.00`. O servico normaliza o valor para percentual `float` e continua validando a faixa entre `0` e `100`.
+O campo de percentual de comissao do tecnico usa a mesma mascara numerica `MoneyMaskEntry`, exibindo no padrao `0,00`. Exemplos validos: `10`, `10,00` e `10.00`. Antes de salvar, o campo deve chamar `format_current()` para normalizar o texto mesmo se o usuario clicar em salvar sem sair do campo. O servico normaliza o valor para percentual `float` e continua validando a faixa entre `0` e `100`.
 
 ## 8. Historico, consultas e exportacoes
 

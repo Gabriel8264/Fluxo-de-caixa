@@ -184,6 +184,11 @@ Responsabilidades:
 - mostrar ultimas movimentacoes
 - mostrar analise do dia
 - abrir anexos
+- manter o submenu `Caixa da empresa`, com saldo real, ajustes manuais, historico proprio de ajustes e acao `Definir saldo real`
+
+No `Caixa da empresa`, o saldo real e calculado como saldo pelos registros comuns mais ajustes manuais liquidos. A acao `Definir saldo real` nao apaga historico nem altera entradas ou saidas comuns: ela cria um ajuste manual compensatorio pela diferenca entre o saldo real atual e o novo saldo informado. A descricao desse ajuste e opcional.
+
+A estrutura visual do submenu `Caixa da empresa` deve usar um container principal estavel em `ui/dashboard.py`. Os cards, indicadores, historico e botoes sao criados uma vez; o refresh deve atualizar apenas textos e linhas da tabela. A tabela de ajustes pode ter scroll proprio e altura fixa, mas a pagina deve manter apenas o scroll principal do painel.
 
 ### 7.3 Novo registro
 
@@ -257,8 +262,11 @@ Componentes importantes:
 - `MoneyMaskEntry`
 - `RegistryManagerFrame`
 - `build_treeview_style()`
+- `center_window()`
 
-`MoneyMaskEntry` e usado nos campos de valores digitaveis. Ele aceita inteiros como reais (`100` -> `100,00`), aceita virgula ou ponto como separador decimal (`12,50` e `12.50`), remove caracteres invalidos, limita duas casas decimais e exibe o padrao brasileiro (`1.234,56`). O valor continua sendo normalizado pelos servicos para `float` antes de persistir.
+`MoneyMaskEntry` e usado nos campos de valores digitaveis. Ele aceita inteiros como reais (`100` -> `100,00`), trata virgula como separador decimal (`12,50`), trata ponto como separador de milhar quando houver grupo de tres digitos (`2.000` -> `2.000,00`) e aceita ponto como decimal apenas em entrada simples (`12.50` -> `12,50`). A conversao unica fica em `core/money.py`, remove caracteres invalidos, limita duas casas decimais e exibe o padrao brasileiro (`1.234,56`). Antes de salvar, os campos monetarios devem chamar `format_current()` para normalizar o texto mesmo quando o usuario clicar em confirmar sem sair do campo. O valor continua sendo normalizado pelos servicos para `float` antes de persistir.
+
+`center_window()` deve ser usado para centralizar novas janelas e modais Tkinter/CustomTkinter. A funcao centraliza em relacao a janela pai quando ela existe, usa a tela como fallback e faz uma segunda medicao apos `update_idletasks()` para compensar escala/DPI e decoracao de janela no Windows.
 
 ## 9. Exportacoes
 
