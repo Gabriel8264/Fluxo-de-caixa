@@ -84,7 +84,7 @@ class CashService:
         split = self.calculate_technical_service_split(valor_servico, technicians)
         service_value = split["valor_servico"]
         movement_date = self._normalize_date(data_movimento) if data_movimento else self.get_active_day()
-        cleaned_description = self._require_text(descricao, "A descrição é obrigatória.")
+        cleaned_description = descricao.strip()
         cleaned_category = self._require_text(categoria, "A categoria é obrigatória.")
         cleaned_person = self._require_text(pessoa, "Informe a pessoa ou empresa.")
         normalized_method = self._normalize_method(metodo)
@@ -132,10 +132,13 @@ class CashService:
 
         commission_exits: list[Movement] = []
         for technician, share in technician_shares:
+            commission_description = f"Comissão técnica · {technician.nome}"
+            if cleaned_description:
+                commission_description = f"{commission_description} · {cleaned_description}"
             commission_exit = Movement(
                 tipo=MovementType.SAIDA.value,
                 valor=share,
-                descricao=f"Comissão técnica · {technician.nome} · {cleaned_description}",
+                descricao=commission_description,
                 categoria="Comissão",
                 metodo=normalized_method,
                 pessoa=technician.nome,
@@ -565,7 +568,7 @@ class CashService:
         """Converte entradas da UI em um objeto Movement consistente."""
         normalized_type = MovementType.from_db(tipo)
         amount = self._normalize_amount(valor)
-        cleaned_description = self._require_text(descricao, "A descrição é obrigatória.")
+        cleaned_description = descricao.strip()
         cleaned_category = self._require_text(categoria, "A categoria é obrigatória.")
         cleaned_person = self._require_text(pessoa, "Informe a pessoa ou empresa.")
 
@@ -598,7 +601,7 @@ class CashService:
         if normalized_type not in {"add_funds", "withdraw_funds"}:
             raise ValueError("Tipo de ajuste inválido.")
         amount = round(self._normalize_amount(valor), 2)
-        description = self._require_text(descricao, "A descrição do ajuste é obrigatória.")
+        description = descricao.strip()
         movement_date = self._normalize_date(data_movimento) if data_movimento else date.today().isoformat()
 
         overview = self.get_company_cash_overview()
@@ -802,7 +805,9 @@ class CashService:
     def _normalize_percentage(value: str | float) -> float:
         """Normaliza percentual de comissão para a faixa entre 0 e 100."""
         if isinstance(value, str):
-            cleaned = value.strip().replace("%", "").replace(",", ".")
+            cleaned = value.strip().replace("%", "")
+            if "," in cleaned:
+                cleaned = cleaned.replace(".", "").replace(",", ".")
         else:
             cleaned = str(value)
         try:

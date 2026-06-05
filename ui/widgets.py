@@ -281,6 +281,109 @@ class DateMaskEntry(ctk.CTkEntry):
         self.insert(0, date.today().strftime("%d/%m/%Y"))
 
 
+class MoneyMaskEntry(ctk.CTkEntry):
+    """Campo monetario que aceita reais e formata no padrao brasileiro."""
+
+    def __init__(self, master, **kwargs) -> None:
+        super().__init__(master, **kwargs)
+        self._formatting = False
+        self.bind("<KeyRelease>", self._on_change)
+        self.bind("<FocusOut>", self._on_focus_out)
+
+    def _on_change(self, _event=None) -> None:
+        if self._formatting:
+            return
+        self._replace_text(self._sanitize(self.get()))
+
+    def _on_focus_out(self, _event=None) -> None:
+        self.format_current()
+
+    def format_current(self) -> None:
+        """Formata o conteudo atual como 1.234,56 quando houver valor."""
+        formatted = self.format_value(self.get())
+        if formatted:
+            self._replace_text(formatted)
+
+    @classmethod
+    def format_value(cls, value: str | float | int) -> str:
+        """Converte texto ou numero para exibicao monetaria brasileira."""
+        text = str(value).strip()
+        if not text:
+            return ""
+        parsed = cls._parse_parts(text)
+        if parsed is None:
+            return ""
+        integer_part, decimal_part = parsed
+        integer_value = int(integer_part or "0")
+        grouped = f"{integer_value:,}".replace(",", ".")
+        return f"{grouped},{decimal_part.ljust(2, '0')[:2]}"
+
+    @classmethod
+    def _sanitize(cls, value: str) -> str:
+        cleaned = "".join(char for char in str(value).strip() if char.isdigit() or char in ",.")
+        if not cleaned:
+            return ""
+        decimal_separator = cls._decimal_separator_index(cleaned)
+        if decimal_separator is not None:
+            last_separator = decimal_separator
+            decimal_digits = "".join(char for char in cleaned[last_separator + 1 :] if char.isdigit())
+            integer_digits = "".join(char for char in cleaned[:last_separator] if char.isdigit()) or "0"
+            integer_value = int(integer_digits)
+            grouped = f"{integer_value:,}".replace(",", ".")
+            return f"{grouped},{decimal_digits[:2]}"
+
+        digits = "".join(char for char in cleaned if char.isdigit())
+        integer_value = int(digits or "0")
+        return f"{integer_value:,}".replace(",", ".")
+
+    @classmethod
+    def _parse_parts(cls, value: str) -> tuple[str, str] | None:
+        cleaned = "".join(char for char in str(value).strip() if char.isdigit() or char in ",.")
+        if not cleaned:
+            return None
+
+        decimal_separator = cls._decimal_separator_index(cleaned)
+        if decimal_separator is not None:
+            last_separator = decimal_separator
+            decimal_digits = "".join(char for char in cleaned[last_separator + 1 :] if char.isdigit())
+            integer_digits = "".join(char for char in cleaned[:last_separator] if char.isdigit()) or "0"
+            return integer_digits, decimal_digits[:2] or "00"
+
+        digits = "".join(char for char in cleaned if char.isdigit())
+        if not digits:
+            return None
+        return digits, "00"
+
+    @staticmethod
+    def _decimal_separator_index(cleaned: str) -> int | None:
+        separators = [index for index, char in enumerate(cleaned) if char in ",."]
+        if not separators:
+            return None
+        last_separator = separators[-1]
+        decimal_digits = "".join(char for char in cleaned[last_separator + 1 :] if char.isdigit())
+        if cleaned[last_separator] == ",":
+            return last_separator
+        if len(decimal_digits) <= 2:
+            return last_separator
+        return None
+
+    def _replace_text(self, text: str) -> None:
+        self._formatting = True
+        try:
+            self.delete(0, "end")
+            self.insert(0, text)
+            self.icursor(len(text))
+        finally:
+            self._formatting = False
+
+    @staticmethod
+    def _format_digits(digits: str) -> str:
+        if not digits:
+            return ""
+        integer_value = int(digits)
+        return f"{integer_value:,}".replace(",", ".") + ",00"
+
+
 def build_treeview_style(root) -> ttk.Style:
     """Configura o estilo padrao das tabelas ttk usadas pela aplicacao."""
     style = ttk.Style(root)
@@ -475,9 +578,9 @@ class TechnicianManagerFrame(SectionFrame):
         self.name_entry = ctk.CTkEntry(form, placeholder_text="Nome do técnico", height=42)
         self.name_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 12))
 
-        self.commission_entry = ctk.CTkEntry(form, placeholder_text="Comissão (%)", height=42)
+        self.commission_entry = MoneyMaskEntry(form, placeholder_text="Comissão (%)", height=42)
         self.commission_entry.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=(0, 12))
-        self.commission_entry.bind("<KeyRelease>", lambda _event: self._refresh_company_percent())
+        self.commission_entry.bind("<KeyRelease>", lambda _event: self._refresh_company_percent(), add="+")
 
         self.company_label = ctk.CTkLabel(
             form,
@@ -593,6 +696,7 @@ class TechnicianManagerFrame(SectionFrame):
         self.name_entry.insert(0, technician.nome)
         self.commission_entry.delete(0, "end")
         self.commission_entry.insert(0, f"{technician.percentual_comissao:.2f}")
+        self.commission_entry.format_current()
         self.status_selector.set(technician.status)
         self._refresh_company_percent()
         self.feedback.configure_text(f"Editando técnico: {technician.nome}")

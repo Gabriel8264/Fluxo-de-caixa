@@ -17,7 +17,7 @@ from services.cash_service import CashService
 from services.excel import exportar_excel
 from services.pdf import gerar_pdf
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps, bind_treeview_mousewheel
+from ui.widgets import DateMaskEntry, MoneyMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, _mousewheel_steps, bind_treeview_mousewheel
 
 
 class ToggleDropdown(ctk.CTkFrame):
@@ -1694,7 +1694,7 @@ class MovementEditorDialog(ctk.CTkToplevel):
         self.type_selector = ctk.CTkSegmentedButton(section, values=[MovementType.ENTRADA.value, MovementType.SAIDA.value], height=40)
         self.type_selector.grid(row=3, column=0, columnspan=2, sticky="ew", padx=18, pady=(8, 18))
 
-        self.value_entry = self._entry(section, 4, 0, "Valor", "0,00")
+        self.value_entry = self._entry(section, 4, 0, "Valor", "0,00", entry_class=MoneyMaskEntry)
         self.description_entry = self._entry(section, 4, 1, "Descrição", "Ex.: ajuste do lançamento")
 
         self.category_selector = self._combo(section, 6, 0, "Categoria")
@@ -1733,9 +1733,9 @@ class MovementEditorDialog(ctk.CTkToplevel):
 
         self._populate()
 
-    def _entry(self, master, row: int, column: int, label: str, placeholder: str) -> ctk.CTkEntry:
+    def _entry(self, master, row: int, column: int, label: str, placeholder: str, *, entry_class=ctk.CTkEntry) -> ctk.CTkEntry:
         ctk.CTkLabel(master, text=label, font=FONTS["body_bold"], text_color=COLORS["text"]).grid(row=row, column=column, sticky="w", padx=(18 if column == 0 else 10, 18))
-        entry = ctk.CTkEntry(master, height=42, placeholder_text=placeholder, fg_color=COLORS["surface_alt"], border_width=0)
+        entry = entry_class(master, height=42, placeholder_text=placeholder, fg_color=COLORS["surface_alt"], border_width=0)
         entry.grid(row=row + 1, column=column, sticky="ew", padx=((18, 10) if column == 0 else (10, 18)), pady=(8, 18))
         return entry
 
@@ -1759,6 +1759,7 @@ class MovementEditorDialog(ctk.CTkToplevel):
 
         self.type_selector.set(self.movement.movement_type.value)
         self.value_entry.insert(0, str(self.movement.valor).replace(".", ","))
+        self.value_entry.format_current()
         self.description_entry.insert(0, self.movement.descricao)
         self.category_selector.set(self.movement.categoria)
         self.person_selector.set(self.movement.pessoa)

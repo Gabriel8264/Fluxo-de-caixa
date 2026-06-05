@@ -15,7 +15,7 @@ from core.models import MovementType, PAYMENT_METHODS, Technician
 from services.attachments import open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import DateMaskEntry, MarqueeLabel, SectionFrame, _bind_scrollable_mousewheel
+from ui.widgets import DateMaskEntry, MarqueeLabel, MoneyMaskEntry, SectionFrame, _bind_scrollable_mousewheel
 
 
 class RegisterView(ctk.CTkScrollableFrame):
@@ -76,10 +76,10 @@ class RegisterView(ctk.CTkScrollableFrame):
 
         self.value_label = ctk.CTkLabel(section, text="Valor", font=FONTS["body_bold"], text_color=COLORS["text"])
         self.value_label.grid(row=4, column=0, padx=20, sticky="w")
-        self.value_entry = ctk.CTkEntry(section, placeholder_text="0,00", height=42, fg_color=COLORS["surface_alt"], border_width=0)
+        self.value_entry = MoneyMaskEntry(section, placeholder_text="0,00", height=42, fg_color=COLORS["surface_alt"], border_width=0)
         self.value_entry.grid(row=5, column=0, padx=20, pady=(8, 18), sticky="ew")
-        self.value_entry.bind("<KeyRelease>", lambda _event: self._update_service_summary())
-        self.description_entry = self._build_entry(section, row=4, column=1, label="Descrição", placeholder="Ex.: venda no balcão")
+        self.value_entry.bind("<KeyRelease>", lambda _event: self._update_service_summary(), add="+")
+        self.description_entry = self._build_entry(section, row=4, column=1, label="Descrição (opcional)", placeholder="Ex.: venda no balcão")
 
         self.category_label = ctk.CTkLabel(section, text="Categoria", font=FONTS["body_bold"], text_color=COLORS["text"])
         self.category_label.grid(row=6, column=0, padx=20, sticky="w")

@@ -151,6 +151,7 @@ Fluxo atual:
 - tipos validos de movimentacao: `entrada` e `saida`
 - data de armazenamento: `YYYY-MM-DD`
 - data exibida: `DD/MM/YYYY`
+- valores monetarios digitaveis usam `MoneyMaskEntry` no formato brasileiro `0,00` ou `1.234,56`
 - banco principal: `caixa.db`
 - estado do dia ativo: `session_state.json`
 
@@ -192,6 +193,26 @@ Ao mexer em rolagem:
 ### Textos com acentos
 
 Sempre revisar os textos renderizados na interface, especialmente quando o terminal mostrar caracteres estranhos. A interface precisa continuar legivel em portugues.
+
+### Mascara monetaria
+
+Campos de valor digitaveis devem usar `MoneyMaskEntry` de `ui/widgets.py`.
+
+Regras atuais:
+
+- inteiros sao tratados como reais: `100` vira `100,00`
+- virgula e ponto podem ser separador decimal: `12,50` e `12.50` viram `12,50`
+- letras e simbolos invalidos sao removidos
+- no maximo duas casas decimais
+- exibicao final em padrao brasileiro: `1.234,56`
+- ao salvar, `services/cash_service.py` normaliza para `float`
+
+Validar em:
+
+- Novo registro
+- Adicionar fundos e Remover fundos no Painel diario
+- edicao de registro no Historico
+- comissao do tecnico, quando usar o mesmo componente
 
 ### Servico tecnico
 

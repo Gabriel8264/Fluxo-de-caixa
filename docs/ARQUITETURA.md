@@ -254,8 +254,11 @@ Componentes importantes:
 - `MetricBadge`
 - `DetailMarqueeBar`
 - `DateMaskEntry`
+- `MoneyMaskEntry`
 - `RegistryManagerFrame`
 - `build_treeview_style()`
+
+`MoneyMaskEntry` e usado nos campos de valores digitaveis. Ele aceita inteiros como reais (`100` -> `100,00`), aceita virgula ou ponto como separador decimal (`12,50` e `12.50`), remove caracteres invalidos, limita duas casas decimais e exibe o padrao brasileiro (`1.234,56`). O valor continua sendo normalizado pelos servicos para `float` antes de persistir.
 
 ## 9. Exportacoes
 

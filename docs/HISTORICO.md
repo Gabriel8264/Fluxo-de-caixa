@@ -225,6 +225,8 @@ Metodos principais:
 - `_render_records`
 - `_render_selected_movement`
 
+Ao editar um registro, o campo `Valor` usa `MoneyMaskEntry` e deve exibir valores carregados no padrao brasileiro (`120.0` -> `120,00`, `1.234,56`). A mascara trata inteiros como reais, aceita virgula ou ponto como separador decimal e o servico normaliza o valor para `float` ao salvar.
+
 ## 9. Detalhes do registro
 
 Os detalhes do registro usam uma ficha compacta unica:

@@ -7,6 +7,8 @@ claro: resumo, movimentacoes recentes e analises.
 
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import date
+import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -16,7 +18,7 @@ from core.models import CompanyCashAdjustment, Movement, MovementType
 from services.attachments import attachment_name, open_attachment
 from services.cash_service import CashService
 from ui.theme import COLORS, FONTS
-from ui.widgets import Card, DetailMarqueeBar, MetricBadge, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, bind_treeview_mousewheel
+from ui.widgets import Card, DetailMarqueeBar, MetricBadge, MoneyMaskEntry, SectionFrame, build_treeview_style, _bind_scrollable_mousewheel, bind_treeview_mousewheel
 
 
 class DashboardView(ctk.CTkScrollableFrame):
@@ -318,7 +320,7 @@ class DashboardView(ctk.CTkScrollableFrame):
         ).grid(row=0, column=1, padx=(12, 12), sticky="e")
         ctk.CTkButton(
             actions,
-            text="Retirar fundos",
+            text="Remover fundos",
             command=lambda: self._open_company_cash_dialog("withdraw_funds"),
             fg_color=COLORS["danger"],
             hover_color=COLORS["danger"],
@@ -646,15 +648,20 @@ class DashboardView(ctk.CTkScrollableFrame):
 
     def _open_company_cash_dialog(self, kind: str) -> None:
         """Abre um modal simples para registrar ajuste manual do caixa da empresa."""
-        title = "Adicionar fundos" if kind == "add_funds" else "Retirar fundos"
+        title = "Adicionar fundos" if kind == "add_funds" else "Remover fundos"
+        confirm_text = "Confirmar adição" if kind == "add_funds" else "Confirmar retirada"
+        dialog_width = 460
+        dialog_height = 460
         dialog = ctk.CTkToplevel(self)
         dialog.title(title)
-        dialog.geometry("460x360")
+        dialog.geometry(f"{dialog_width}x{dialog_height}")
         dialog.resizable(False, False)
         dialog.transient(self.winfo_toplevel())
         dialog.grab_set()
         dialog.configure(fg_color=COLORS["bg"])
         dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(0, weight=1)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
 
         section = SectionFrame(
             dialog,
@@ -664,30 +671,35 @@ class DashboardView(ctk.CTkScrollableFrame):
         )
         section.grid(row=0, column=0, sticky="nsew", padx=18, pady=18)
         section.grid_columnconfigure(0, weight=1)
+        section.grid_rowconfigure(2, weight=1)
+
+        form = ctk.CTkFrame(section, fg_color="transparent")
+        form.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        form.grid_columnconfigure(0, weight=1)
 
         value_var = tk.StringVar()
         date_var = tk.StringVar(value=self._display_day(date.today().isoformat()))
 
-        ctk.CTkLabel(section, text="Valor", font=FONTS["small"], text_color=COLORS["muted"]).grid(
-            row=2, column=0, sticky="w", padx=16, pady=(0, 6)
+        ctk.CTkLabel(form, text="Valor", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=0, column=0, sticky="w", pady=(0, 6)
         )
-        value_entry = ctk.CTkEntry(section, textvariable=value_var, height=40)
-        value_entry.grid(row=3, column=0, sticky="ew", padx=16)
+        value_entry = MoneyMaskEntry(form, textvariable=value_var, height=40)
+        value_entry.grid(row=1, column=0, sticky="ew")
 
-        ctk.CTkLabel(section, text="Descrição", font=FONTS["small"], text_color=COLORS["muted"]).grid(
-            row=4, column=0, sticky="w", padx=16, pady=(12, 6)
+        ctk.CTkLabel(form, text="Descrição (opcional)", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=2, column=0, sticky="w", pady=(12, 6)
         )
-        description_entry = ctk.CTkEntry(section, height=40, placeholder_text="Descrição obrigatória do ajuste")
-        description_entry.grid(row=5, column=0, sticky="ew", padx=16)
+        description_entry = ctk.CTkEntry(form, height=40, placeholder_text="Descrição do ajuste")
+        description_entry.grid(row=3, column=0, sticky="ew")
 
-        ctk.CTkLabel(section, text="Data", font=FONTS["small"], text_color=COLORS["muted"]).grid(
-            row=6, column=0, sticky="w", padx=16, pady=(12, 6)
+        ctk.CTkLabel(form, text="Data", font=FONTS["small"], text_color=COLORS["muted"]).grid(
+            row=4, column=0, sticky="w", pady=(12, 6)
         )
-        date_entry = ctk.CTkEntry(section, textvariable=date_var, height=40)
-        date_entry.grid(row=7, column=0, sticky="ew", padx=16)
+        date_entry = ctk.CTkEntry(form, textvariable=date_var, height=40)
+        date_entry.grid(row=5, column=0, sticky="ew")
 
-        actions = ctk.CTkFrame(section, fg_color="transparent")
-        actions.grid(row=8, column=0, sticky="ew", padx=16, pady=(16, 16))
+        actions = ctk.CTkFrame(form, fg_color="transparent")
+        actions.grid(row=6, column=0, sticky="ew", pady=(16, 0))
         actions.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(actions, text="Cancelar", command=dialog.destroy, width=120, height=38).grid(
             row=0, column=1, padx=(0, 12), sticky="e"
@@ -707,22 +719,66 @@ class DashboardView(ctk.CTkScrollableFrame):
                         descricao=description_entry.get(),
                         data_movimento=date_entry.get(),
                     )
+                self.refresh()
             except ValueError as exc:
                 messagebox.showerror("Caixa da empresa", str(exc), parent=dialog)
                 return
+            except sqlite3.Error as exc:
+                messagebox.showerror(
+                    "Caixa da empresa",
+                    f"Nao foi possivel salvar o ajuste no banco de dados.\n\n{exc}",
+                    parent=dialog,
+                )
+                return
+            except Exception as exc:
+                messagebox.showerror(
+                    "Caixa da empresa",
+                    f"Nao foi possivel concluir o ajuste.\n\n{exc}",
+                    parent=dialog,
+                )
+                return
             dialog.destroy()
-            self.refresh()
-            messagebox.showinfo("Caixa da empresa", f"{title} registrado com sucesso.")
+            messagebox.showinfo("Caixa da empresa", f"{title} registrado com sucesso.", parent=self.winfo_toplevel())
 
-        ctk.CTkButton(
+        save_button = ctk.CTkButton(
             actions,
-            text="Salvar ajuste",
-            command=submit,
+            text=confirm_text,
             fg_color=COLORS["primary"],
             hover_color=COLORS["primary_hover"],
             width=140,
             height=38,
-        ).grid(row=0, column=2, sticky="e")
+        )
+        save_button.grid(row=0, column=2, sticky="e")
+
+        def guarded_submit() -> None:
+            if save_button.cget("state") == "disabled":
+                return
+            save_button.configure(state="disabled", text="Salvando...")
+            try:
+                submit()
+            finally:
+                if dialog.winfo_exists():
+                    save_button.configure(state="normal", text=confirm_text)
+
+        def center_dialog() -> None:
+            dialog.update_idletasks()
+            try:
+                from ctypes import windll
+
+                screen_width = int(windll.user32.GetSystemMetrics(0))
+                screen_height = int(windll.user32.GetSystemMetrics(1))
+            except Exception:
+                screen_width = dialog.winfo_screenwidth()
+                screen_height = dialog.winfo_screenheight()
+            actual_width = max(dialog.winfo_width(), dialog_width)
+            actual_height = max(dialog.winfo_height(), dialog_height)
+            x = max((screen_width - actual_width) // 2, 0)
+            y = max((screen_height - actual_height) // 2, 0)
+            dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+
+        save_button.configure(command=guarded_submit)
+        dialog.bind("<Return>", lambda _event: guarded_submit())
+        dialog.after(100, lambda: (center_dialog(), dialog.lift(), dialog.focus_force(), value_entry.focus_set()))
 
         value_entry.focus_set()
 
